@@ -3,7 +3,7 @@ import { parseArgs } from "node:util";
 import { claude } from "./sources/claude.ts";
 import { codex } from "./sources/codex.ts";
 import { pi } from "./sources/pi.ts";
-import { render, sessionLabel } from "./render.ts";
+import { render, sessionLabel, stamp } from "./render.ts";
 import { haystack, highlight, matcher, mergeSessions, snippet } from "./search.ts";
 import { Tailer, type Emitted } from "./tailer.ts";
 import type { AgentName, EventKind, Source } from "./types.ts";
@@ -35,6 +35,8 @@ Options:
   -F, --full-content     print everything untruncated: whole messages,
                          whole tool results, complete tool-call input
   -t, --text-tag         text tags like [user] [tool] instead of glyphs
+  -T, --timestamps       full date and time on each line (default for
+                         grep / show; live mode shows time of day only)
   -o, --output <fmt>     text (default), jsonl (parsed events, one JSON
                          object per line) or raw (original transcript
                          records, tagged with agent and session)
@@ -89,6 +91,7 @@ async function main() {
       full: { type: "boolean", short: "f" },
       "full-content": { type: "boolean", short: "F" },
       "text-tag": { type: "boolean", short: "t" },
+      timestamps: { type: "boolean", short: "T" },
       output: { type: "string", short: "o", default: "text" },
       json: { type: "boolean" },
       jsonl: { type: "boolean" },
@@ -149,6 +152,7 @@ async function main() {
     full: Boolean(values.full),
     fullContent: Boolean(values["full-content"]),
     textTag: Boolean(values["text-tag"]),
+    date: Boolean(values.timestamps) || isHistory,
     width: process.stdout.isTTY ? process.stdout.columns ?? 120 : 0,
   };
   process.stdout.on("resize", () => (ropts.width = process.stdout.columns ?? 120));
@@ -283,7 +287,8 @@ async function main() {
     for (const h of hits) {
       const n = h.matches.length;
       if (values.list) {
-        const row = [ago(h.matches.at(-1)!.event.time).padStart(4), h.info.agent.padEnd(7), h.info.id.padEnd(38), `${n} match${n > 1 ? "es" : ""}`.padEnd(11), h.info.cwd ?? ""];
+        const last = h.matches.at(-1)!.event.time;
+        const row = [`${stamp(last)} ${`(${ago(last)})`.padEnd(6)}`, h.info.agent.padEnd(7), h.info.id.padEnd(38), `${n} match${n > 1 ? "es" : ""}`.padEnd(11), h.info.cwd ?? ""];
         process.stdout.write(row.join("  ") + "\n");
         continue;
       }

@@ -7,6 +7,8 @@ export interface RenderOptions {
   /** Show full multi-line text instead of one truncated line per event. */
   full: boolean;
   width: number;
+  /** Prefix each line with the full local date, not just the time of day. */
+  date: boolean;
   /** Like `full`, but nothing is shortened: whole tool results and raw tool inputs. */
   fullContent: boolean;
   /** Plain-text tags like [tool] instead of glyphs. */
@@ -83,8 +85,12 @@ function truncate(s: string, width: number): string {
   return out;
 }
 
-function time(d: Date) {
-  return d.toTimeString().slice(0, 8);
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/** Local "HH:MM:SS", or "YYYY-MM-DD HH:MM:SS" with `date`. */
+export function stamp(d: Date, date = true) {
+  const t = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  return date ? `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${t}` : t;
 }
 
 export function sessionLabel(e: Emitted["session"], textTag = false) {
@@ -101,10 +107,10 @@ export function render(e: Emitted, o: RenderOptions): string {
   const agent = session.agent.padEnd(7);
   const label = sessionLabel(session, o.textTag);
   const prefix =
-    `${paint(C.dim, time(event.time))} ` +
+    `${paint(C.dim, stamp(event.time, o.date))} ` +
     `${paint(AGENT_COLOR[session.agent], agent)} ` +
     `${paint(sessionColor(session.file), label)} `;
-  const prefixWidth = 9 + 8 + label.length + 1;
+  const prefixWidth = (o.date ? 20 : 9) + 8 + label.length + 1;
 
   const mark = o.textTag ? k.tag.padEnd(TAG_WIDTH) : k.glyph;
   const head = event.label ? `${mark} ${event.label}` : mark;
@@ -119,7 +125,7 @@ export function render(e: Emitted, o: RenderOptions): string {
     return `${prefix}${paint(k.color, head)} ${paint(k.color, text)}`;
   }
 
-  const indent = " ".repeat(Math.min(prefixWidth, 24)) + "  ";
+  const indent = " ".repeat(Math.min(prefixWidth, o.date ? 35 : 24)) + "  ";
   let lines = body.split("\n");
   if (!o.fullContent && event.kind === "result" && lines.length > 20) {
     lines = [...lines.slice(0, 20), `… ${lines.length - 20} more lines`];
