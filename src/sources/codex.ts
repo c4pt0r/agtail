@@ -7,6 +7,11 @@ import { envPath, home, summarizeInput, textOf, toDate } from "../util.ts";
 // write here; `session_meta.originator` tells them apart.
 const INJECTED = /^\s*<(environment_context|app-context|user_instructions|permissions|user_shell_command|turn_aborted|INSTRUCTIONS)/;
 
+/** Harness context is sent as user turns made only of <tag>…</tag> blocks. */
+function onlyTagBlocks(text: string): boolean {
+  return /^\s*</.test(text) && !text.replace(/<([A-Za-z_][\w-]*)[^>]*>[\s\S]*?<\/\1>/g, "").trim();
+}
+
 function classify(info: SessionInfo, meta: any) {
   if (!meta || typeof meta !== "object") return;
   if (typeof meta.cwd === "string") info.cwd = meta.cwd;
@@ -57,7 +62,7 @@ export const codex: Source = {
       case "message": {
         if (p.role !== "user" && p.role !== "assistant") return [];
         const text = textOf(p.content);
-        if (p.role === "user" && INJECTED.test(text)) return [];
+        if (p.role === "user" && (INJECTED.test(text) || onlyTagBlocks(text))) return [];
         return [{ time, kind: p.role, text }];
       }
       case "agent_message":

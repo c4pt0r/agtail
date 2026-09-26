@@ -65,6 +65,29 @@ $ agtail ls
   1h  codex    web#019faf79       /Users/me/src/web
 ```
 
+### Searching history
+
+```sh
+agtail grep kubernetes        # every session (any agent, all history) mentioning a keyword
+agtail grep -l stripe        # just list matching sessions: agent, full session id, count
+agtail grep -E 'api[_-]?key' -k user          # regex, only in what you typed
+agtail grep deploy --show    # print each matching session in full
+agtail show fb1dd6ac         # print one whole session from the start (any unique id prefix)
+agtail show fb1dd6ac -q -f   # …only the conversation, full messages
+```
+
+```console
+$ agtail grep -l helloworld
+ 26d  pi       019ff1cf-9270-72ef-be2f-b487189ec165    1 match      /Users/me/16nx
+  4h  chatgpt  01a0df86-ba6b-74b0-82d1-ceccceacd6da    1 match      /Users/me/Documents/Codex/new-chat
+```
+
+Matching is case-insensitive and covers messages, thinking, tool calls (including their full
+input) and tool results. `grep` shows up to `--max` (default 5) matching lines per session, each
+cut down to the text around the match, with the match highlighted. `-a`, `-p`, `-k` and `--since`
+narrow both commands, and `-o jsonl` / `-o raw` work with them too. Codex sessions that were
+resumed into several files are merged back into one.
+
 ### Filtering
 
 ```sh

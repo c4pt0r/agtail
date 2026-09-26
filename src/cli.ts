@@ -4,6 +4,7 @@ import { claude } from "./sources/claude.ts";
 import { codex } from "./sources/codex.ts";
 import { pi } from "./sources/pi.ts";
 import { render, sessionLabel } from "./render.ts";
+import { haystack, highlight, matcher, mergeSessions, snippet } from "./search.ts";
 import { Tailer, type Emitted } from "./tailer.ts";
 import type { AgentName, EventKind, Source } from "./types.ts";
 
@@ -12,6 +13,8 @@ const HELP = `agtail — tail -f for local coding agents
 Usage:
   agtail [options]          follow all agent sessions live
   agtail ls [options]       list recently active sessions
+  agtail grep <keyword>     find sessions containing <keyword> (all history)
+  agtail show <session-id>  print a whole session from the start
 
 Agents: claude (Claude Code), codex (Codex CLI), chatgpt (ChatGPT/Codex
 desktop app & Chrome side panel), pi (pi coding agent)
@@ -38,6 +41,15 @@ Options:
       --json, --jsonl    same as -o jsonl
       --no-color         disable colors
   -h, --help             show this help
+
+grep / show:
+  -E, --regex            treat the keyword as a regular expression
+                         (matching is always case-insensitive)
+  -l, --list             grep: only list matching sessions
+      --max <n>          grep: matching lines shown per session (default 5)
+      --show             grep: print every matching session in full
+  -a/-p/-k/--since also narrow grep and show; -f/-F/-t/-o shape the output.
+  <session-id> can be any unique prefix, e.g. the 8 chars after "#".
 
 Env: CLAUDE_CONFIG_DIR, CODEX_HOME, PI_CODING_AGENT_DIR override locations.
 `;
@@ -82,6 +94,10 @@ async function main() {
       jsonl: { type: "boolean" },
       "no-color": { type: "boolean" },
       help: { type: "boolean", short: "h" },
+      regex: { type: "boolean", short: "E" },
+      list: { type: "boolean", short: "l" },
+      max: { type: "string", default: "5" },
+      show: { type: "boolean" },
     },
   });
   if (values.help) {
@@ -100,8 +116,11 @@ async function main() {
   const kinds = (values.quiet ? ["user", "assistant", "error"] : list(values.kinds)) as
     | EventKind[]
     | undefined;
-  const isLs = positionals[0] === "ls" || positionals[0] === "list";
-  const sinceMs = duration(values.since ?? (isLs ? "1d" : "1h"));
+  const cmd = positionals[0];
+  const isLs = cmd === "ls" || cmd === "list";
+  const isHistory = cmd === "grep" || cmd === "show";
+  // grep / show search all history unless --since is given
+  const sinceMs = values.since ? duration(values.since) : isLs ? 864e5 : isHistory ? Infinity : 36e5;
   const lines = Number(values.lines);
 
   // "chatgpt" sessions live in the codex store, so load codex for either.
@@ -110,12 +129,15 @@ async function main() {
   if (!agents || agents.includes("codex") || agents.includes("chatgpt")) sources.push(codex);
   if (!agents || agents.includes("pi")) sources.push(pi);
 
-  const keep = (e: Emitted) => {
-    const s = e.session;
+  const sessionOk = (s: Emitted["session"]) => {
     if (agents && !agents.includes(s.agent)) return false;
     if (values.project && !(s.cwd ?? "").includes(values.project)) return false;
     if (values.session && !s.id.startsWith(values.session)) return false;
     if (values["no-subagents"] && s.parent) return false;
+    return true;
+  };
+  const keep = (e: Emitted) => {
+    if (!sessionOk(e.session)) return false;
     // raw records have no event kind, so -k / -q don't apply to them
     if (kinds && !raw && !kinds.includes(e.event.kind)) return false;
     return true;
@@ -162,16 +184,136 @@ async function main() {
     }
   };
 
+  const header = (info: Emitted["session"], extra: string) => {
+    if (output !== "text") return;
+    const tag = `${info.agent} ${sessionLabel(info, ropts.textTag)}`;
+    const line = [tag, info.id, extra, info.cwd, info.title].filter(Boolean).join("  ·  ");
+    process.stdout.write((color ? `\x1b[1;36m── ${line}\x1b[0m` : `── ${line}`) + "\n");
+  };
+
+  async function history() {
+    const arg = positionals.slice(1).join(" ");
+    if (!arg) {
+      process.stderr.write(`agtail ${cmd}: missing ${cmd === "grep" ? "<keyword>" : "<session-id>"}\n`);
+      process.exit(2);
+    }
+    const since = Number.isFinite(sinceMs) ? sinceMs : undefined;
+    const printSession = (events: Emitted[]) => {
+      for (const e of events) if (keep(e)) print(e);
+    };
+
+    if (cmd === "show") {
+      const q = arg.toLowerCase();
+      const found = mergeSessions(
+        await new Tailer({ sources, sinceMs: 0, raw, onEvent: () => {} }).readAll({
+          sinceMs: since,
+          file: (f) => f.toLowerCase().includes(q),
+        }),
+      ).filter((s) => s.info.id.toLowerCase().startsWith(q) && sessionOk(s.info));
+      if (!found.length) {
+        process.stderr.write(`agtail show: no session matches "${arg}"\n`);
+        process.exit(1);
+      }
+      if (found.length > 1) {
+        process.stderr.write(`agtail show: "${arg}" matches ${found.length} sessions, use a longer prefix:\n`);
+        for (const s of found) process.stderr.write(`  ${s.info.agent.padEnd(7)} ${s.info.id}  ${s.info.cwd ?? ""}\n`);
+        process.exit(1);
+      }
+      const [s] = found;
+      header(s!.info, `${ago(s!.mtime)} ago`);
+      printSession(s!.events);
+      return;
+    }
+
+    // grep
+    if (raw && !values.show) {
+      process.stderr.write("agtail grep: -o raw needs --show (raw records are printed per session)\n");
+      process.exit(2);
+    }
+    let m;
+    try {
+      m = matcher(arg, Boolean(values.regex));
+    } catch (err) {
+      process.stderr.write(`agtail grep: bad regex: ${(err as Error).message}\n`);
+      process.exit(2);
+    }
+    const sessions = mergeSessions(
+      await new Tailer({ sources, sinceMs: 0, onEvent: () => {} }).readAll({
+        sinceMs: since,
+        content: (text) => m.mayContain(text),
+      }),
+    );
+    const hits = sessions
+      .filter((s) => sessionOk(s.info))
+      .map((s) => ({ ...s, matches: s.events.filter((e) => keep(e) && m.test(e.event)) }))
+      .filter((s) => s.matches.length)
+      .sort((a, b) => a.matches.at(-1)!.event.time.getTime() - b.matches.at(-1)!.event.time.getTime());
+
+    if (!hits.length) {
+      process.stderr.write(`no sessions contain "${arg}"\n`);
+      process.exit(1);
+    }
+
+    if (values.show) {
+      let rawById: Map<string, Emitted[]> | undefined;
+      if (raw) {
+        // re-read every file of each hit session (resumed codex sessions span several)
+        const ids = new Set(hits.map((h) => h.info.id));
+        const rawSessions = mergeSessions(
+          await new Tailer({ sources, sinceMs: 0, raw: true, onEvent: () => {} }).readAll({
+            file: (f) => [...ids].some((id) => f.includes(id)),
+          }),
+        );
+        rawById = new Map(rawSessions.map((s) => [s.info.id, s.events]));
+      }
+      for (const h of hits) {
+        header(h.info, `${h.matches.length} matches`);
+        printSession(rawById?.get(h.info.id) ?? h.events);
+        if (output === "text") process.stdout.write("\n");
+      }
+      return;
+    }
+
+    if (output === "jsonl") {
+      for (const h of hits) for (const e of h.matches) print(e);
+      return;
+    }
+
+    const max = Number(values.max);
+    for (const h of hits) {
+      const n = h.matches.length;
+      if (values.list) {
+        const row = [ago(h.matches.at(-1)!.event.time).padStart(4), h.info.agent.padEnd(7), h.info.id.padEnd(38), `${n} match${n > 1 ? "es" : ""}`.padEnd(11), h.info.cwd ?? ""];
+        process.stdout.write(row.join("  ") + "\n");
+        continue;
+      }
+      header(h.info, `${n} match${n > 1 ? "es" : ""}`);
+      for (const e of h.matches.slice(-max)) {
+        // one line centred on the match; the tool name stays in the label
+        const text = snippet(haystack({ ...e.event, label: undefined }), m);
+        const line = render({ ...e, event: { ...e.event, text, input: undefined } }, { ...ropts, full: false, fullContent: false });
+        process.stdout.write((color ? highlight(line, m) : line) + "\n");
+      }
+      if (n > max) process.stdout.write(`   … ${n - max} earlier matches; agtail show ${h.info.id.slice(0, 8)}\n`);
+      process.stdout.write("\n");
+    }
+    const total = hits.reduce((a, h) => a + h.matches.length, 0);
+    const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : w.endsWith("h") ? "es" : "s"}`;
+    process.stderr.write(`${plural(total, "match")} in ${plural(hits.length, "session")}\n`);
+  }
+
   if (isLs) {
     const tailer = new Tailer({ sources, sinceMs, onEvent: () => {} });
-    const rows = (await tailer.sessions(sinceMs)).filter((r) =>
-      keep({ session: r.info, event: { time: r.mtime, kind: "meta", text: "" } }),
-    );
+    const rows = (await tailer.sessions(sinceMs)).filter((r) => sessionOk(r.info));
     for (const { info, mtime } of rows) {
       const row = [ago(mtime).padStart(4), info.agent.padEnd(7), sessionLabel(info, Boolean(values["text-tag"])).padEnd(30), info.title ?? info.cwd ?? ""];
       process.stdout.write(row.join("  ") + "\n");
     }
     if (!rows.length) process.stdout.write("no active sessions\n");
+    return;
+  }
+  if (isHistory) {
+    await history();
     return;
   }
   if (positionals.length) {

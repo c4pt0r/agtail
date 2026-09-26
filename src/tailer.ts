@@ -119,6 +119,32 @@ export class Tailer {
     return out.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
   }
 
+  /**
+   * Parse whole session files from the start (for grep / show). `file` and
+   * `content` let callers skip files cheaply before any JSON is parsed.
+   */
+  async readAll(
+    filter: { sinceMs?: number; file?: (file: string) => boolean; content?: (text: string) => boolean } = {},
+  ): Promise<{ info: SessionInfo; mtime: Date; events: Emitted[] }[]> {
+    const now = Date.now();
+    const out: { info: SessionInfo; mtime: Date; events: Emitted[] }[] = [];
+    for (const { src, file, stat } of await this.discover()) {
+      if (filter.sinceMs !== undefined && now - stat.mtimeMs > filter.sinceMs) continue;
+      if (filter.file && !filter.file(file)) continue;
+      let text: string;
+      try {
+        text = await fsp.readFile(file, "utf8");
+      } catch {
+        continue;
+      }
+      if (filter.content && !filter.content(text)) continue;
+      const t = this.track(src, file, stat);
+      const info = await this.ensureInfo(t);
+      out.push({ info, mtime: stat.mtime, events: this.parseLines(t, info, text.split("\n")) });
+    }
+    return out;
+  }
+
   stop() {
     for (const w of this.watchers) w.close();
     if (this.timer) clearInterval(this.timer);
