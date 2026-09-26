@@ -2,16 +2,38 @@
   "name": "agtail",
   "version": "0.1.0",
   "description": "tail -f for local coding agents: follow Claude Code, Codex, ChatGPT desktop and pi sessions live",
+  "keywords": [
+    "claude-code",
+    "codex",
+    "chatgpt",
+    "pi",
+    "coding-agent",
+    "tail",
+    "cli",
+    "monitor"
+  ],
+  "author": "c4pt0r",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/c4pt0r/agtail.git"
+  },
+  "homepage": "https://github.com/c4pt0r/agtail#readme",
   "type": "module",
-  "bin": { "agtail": "dist/cli.js" },
-  "files": ["dist"],
+  "bin": {
+    "agtail": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "node src/cli.ts",
     "prepare": "tsc",
     "typecheck": "tsc --noEmit"
   },
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^22.0.0",
