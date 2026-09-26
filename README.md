@@ -133,6 +133,25 @@ Use `-t` / `--text-tag` when your font lacks the glyphs, or when you want output
 Each line is tagged `<project>#<session-id>`, colored per session so interleaved sessions stay
 readable. A trailing `↳` on the tag (or `(sub)` with `--text-tag`) marks a subagent.
 
+### Example: flag sensitive prompts
+
+[`examples/sensitive-input.mjs`](examples/sensitive-input.mjs) sends every user prompt to
+[TypeSafe's Jev](https://docs.typesafe.ai) and reports the ones that contain credentials,
+personal data, financial data or confidential business information:
+
+```sh
+export TYPESAFE_API_KEY=...        # https://console.typesafe.ai/keys
+agtail -o jsonl -n 0 -k user | node examples/sensitive-input.mjs
+```
+
+```
+⚠ SENSITIVE codex web#019faf79  credentials 0.96
+    use this key: sk-… to call the API
+```
+
+Set `SENSITIVE_NOTIFY=1` for macOS notifications, `SENSITIVE_THRESHOLD` to tune (default 0.5),
+or `SENSITIVE_ALL=1` to also print clean prompts. Note that the prompts are sent to TypeSafe to be judged.
+
 ## How it works
 
 `agtail` walks each agent's session directory, replays the tail of recently modified transcripts,
