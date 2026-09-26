@@ -56,7 +56,7 @@ export const pi: Source = {
           if (c?.type === "text" && c.text) out.push({ time, kind: "assistant", text: c.text });
           else if (c?.type === "thinking" && c.thinking) out.push({ time, kind: "thinking", text: c.thinking });
           else if (c?.type === "toolCall")
-            out.push({ time, kind: "tool", label: c.name, text: summarizeInput(c.arguments) });
+            out.push({ time, kind: "tool", label: c.name, text: summarizeInput(c.arguments), input: c.arguments });
         }
         if (m.stopReason === "error" && m.errorMessage)
           out.push({ time, kind: "error", text: String(m.errorMessage) });

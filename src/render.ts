@@ -1,12 +1,14 @@
 import type { AgentName, EventKind } from "./types.ts";
 import type { Emitted } from "./tailer.ts";
-import { project, shortId } from "./util.ts";
+import { formatInput, project, shortId } from "./util.ts";
 
 export interface RenderOptions {
   color: boolean;
   /** Show full multi-line text instead of one truncated line per event. */
   full: boolean;
   width: number;
+  /** Like `full`, but nothing is shortened: whole tool results and raw tool inputs. */
+  fullContent: boolean;
   /** Plain-text tags like [tool] instead of glyphs. */
   textTag: boolean;
 }
@@ -106,9 +108,11 @@ export function render(e: Emitted, o: RenderOptions): string {
 
   const mark = o.textTag ? k.tag.padEnd(TAG_WIDTH) : k.glyph;
   const head = event.label ? `${mark} ${event.label}` : mark;
-  const body = event.text.replace(/\r/g, "");
+  const text =
+    o.fullContent && event.input !== undefined ? formatInput(event.input) : event.text;
+  const body = text.replace(/\r/g, "");
 
-  if (!o.full) {
+  if (!o.full && !o.fullContent) {
     const one = body.replace(/\s+/g, " ").trim();
     const room = o.width - prefixWidth - head.length - 1;
     const text = o.width > 0 ? truncate(one, Math.max(room, 20)) : one;
@@ -117,7 +121,7 @@ export function render(e: Emitted, o: RenderOptions): string {
 
   const indent = " ".repeat(Math.min(prefixWidth, 24)) + "  ";
   let lines = body.split("\n");
-  if (event.kind === "result" && lines.length > 20) {
+  if (!o.fullContent && event.kind === "result" && lines.length > 20) {
     lines = [...lines.slice(0, 20), `… ${lines.length - 20} more lines`];
   }
   const [first, ...rest] = lines;

@@ -59,7 +59,7 @@ export const claude: Source = {
           break;
         case "tool_use":
         case "server_tool_use":
-          out.push({ time, kind: "tool", label: c.name, text: summarizeInput(c.input) });
+          out.push({ time, kind: "tool", label: c.name, text: summarizeInput(c.input), input: c.input });
           break;
         case "tool_result":
           out.push({

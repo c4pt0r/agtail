@@ -28,6 +28,9 @@ Options:
       --since <dur>      replay window, e.g. 30s 15m 2h 1d (default 1h; 1d for ls)
       --no-follow        print the replay and exit
   -f, --full             print full multi-line messages
+                         (tool results capped at 20 lines)
+  -F, --full-content     print everything untruncated: whole messages,
+                         whole tool results, complete tool-call input
   -t, --text-tag         text tags like [user] [tool] instead of glyphs
       --json             emit NDJSON events
       --no-color         disable colors
@@ -69,6 +72,7 @@ async function main() {
       since: { type: "string" },
       "no-follow": { type: "boolean" },
       full: { type: "boolean", short: "f" },
+      "full-content": { type: "boolean", short: "F" },
       "text-tag": { type: "boolean", short: "t" },
       json: { type: "boolean" },
       "no-color": { type: "boolean" },
@@ -108,6 +112,7 @@ async function main() {
   const ropts = {
     color: Boolean(color),
     full: Boolean(values.full),
+    fullContent: Boolean(values["full-content"]),
     textTag: Boolean(values["text-tag"]),
     width: process.stdout.isTTY ? process.stdout.columns ?? 120 : 0,
   };
@@ -131,6 +136,7 @@ async function main() {
           kind: ev.kind,
           label: ev.label,
           text: ev.text,
+          ...(values["full-content"] && ev.input !== undefined ? { input: ev.input } : {}),
         }) + "\n",
       );
     } else {

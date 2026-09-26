@@ -67,7 +67,7 @@ export const codex: Source = {
         return text ? [{ time, kind: "thinking", text }] : [];
       }
       case "function_call":
-        return [{ time, kind: "tool", label: p.namespace ? `${p.namespace}.${p.name}` : p.name, text: summarizeInput(p.arguments) }];
+        return [{ time, kind: "tool", label: p.namespace ? `${p.namespace}.${p.name}` : p.name, text: summarizeInput(p.arguments), input: p.arguments }];
       case "custom_tool_call": {
         // the desktop app's `exec` tool wraps shell commands in JS: show the command
         const cmd = typeof p.input === "string" && /\bcmd:\s*("(?:[^"\\]|\\.)*")/.exec(p.input);
@@ -77,12 +77,12 @@ export const codex: Source = {
             text = JSON.parse(cmd[1]!);
           } catch {}
         }
-        return [{ time, kind: "tool", label: p.name, text }];
+        return [{ time, kind: "tool", label: p.name, text, input: p.input }];
       }
       case "local_shell_call":
-        return [{ time, kind: "tool", label: "shell", text: summarizeInput(p.action?.command ?? p.action) }];
+        return [{ time, kind: "tool", label: "shell", text: summarizeInput(p.action?.command ?? p.action), input: p.action }];
       case "web_search_call":
-        return [{ time, kind: "tool", label: "web_search", text: summarizeInput(p.action ?? p) }];
+        return [{ time, kind: "tool", label: "web_search", text: summarizeInput(p.action ?? p), input: p.action }];
       case "function_call_output":
       case "custom_tool_call_output":
       case "local_shell_call_output": {

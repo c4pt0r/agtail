@@ -15,6 +15,8 @@ export interface AgentEvent {
   /** Short heading, e.g. a tool name. */
   label?: string;
   text: string;
+  /** Raw tool-call input, shown in full with --full-content. */
+  input?: unknown;
 }
 
 /** Per-file state a parser may keep across lines (cwd, model, ...). */

@@ -79,7 +79,8 @@ agtail --no-subagents       # hide subagent / sidechain sessions
 ### Output
 
 ```sh
-agtail -f                   # full multi-line messages instead of one line each
+agtail -f                   # full multi-line messages (tool results capped at 20 lines)
+agtail -F                   # --full-content: nothing truncated, complete tool-call input too
 agtail -t                   # text tags ([user] [tool] …) instead of glyphs
 agtail -n 100 --since 1d    # bigger replay window
 agtail --no-follow          # print the replay and exit, like plain `tail`

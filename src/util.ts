@@ -76,6 +76,18 @@ export function summarizeInput(input: unknown): string {
   return JSON.stringify(o);
 }
 
+/** Complete tool input for --full-content: pretty JSON, or the raw string. */
+export function formatInput(input: unknown): string {
+  if (typeof input === "string") {
+    try {
+      const j = JSON.parse(input);
+      if (j && typeof j === "object") return JSON.stringify(j, null, 2);
+    } catch {}
+    return input;
+  }
+  return JSON.stringify(input, null, 2) ?? "";
+}
+
 export function shortId(id: string): string {
   return id.replace(/^.*?([0-9a-f]{8})[0-9a-f-]*$/i, "$1").slice(0, 8);
 }
