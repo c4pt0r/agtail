@@ -41,10 +41,14 @@ the `originator` recorded in each session's header.
 ## Install
 
 ```sh
+npm install -g agtail
+```
+
+Or from source:
+
+```sh
 git clone https://github.com/c4pt0r/agtail.git
-cd agtail
-npm install        # also compiles to dist/
-npm install -g .   # puts `agtail` on your PATH
+cd agtail && npm install && npm install -g .
 ```
 
 ## Usage
@@ -76,6 +80,7 @@ agtail --no-subagents       # hide subagent / sidechain sessions
 
 ```sh
 agtail -f                   # full multi-line messages instead of one line each
+agtail -t                   # text tags ([user] [tool] …) instead of glyphs
 agtail -n 100 --since 1d    # bigger replay window
 agtail --no-follow          # print the replay and exit, like plain `tail`
 agtail --json | jq -r 'select(.kind=="error") | "\(.agent) \(.cwd): \(.text)"'
@@ -89,18 +94,21 @@ JSON events look like this:
 
 ### Reading the stream
 
-| Glyph | Event                     |
-| ----- | ------------------------- |
-| `❯`   | user prompt               |
-| `●`   | assistant reply           |
-| `∴`   | thinking / reasoning      |
-| `⚙`   | tool call (name + input)  |
-| `↳`   | tool result               |
-| `✗`   | error / failed tool       |
-| `·`   | meta: model switch, compaction… |
+| Glyph | `--text-tag` | Event                           |
+| ----- | ------------ | ------------------------------- |
+| `❯`   | `[user]`     | user prompt                     |
+| `●`   | `[asst]`     | assistant reply                 |
+| `∴`   | `[think]`    | thinking / reasoning            |
+| `⚙`   | `[tool]`     | tool call (name + input)        |
+| `↳`   | `[result]`   | tool result                     |
+| `✗`   | `[error]`    | error / failed tool             |
+| `·`   | `[meta]`     | meta: model switch, compaction… |
+
+Use `-t` / `--text-tag` when your font lacks the glyphs, or when you want output that is easy to
+`grep` (`agtail -t | grep '\[error\]'`).
 
 Each line is tagged `<project>#<session-id>`, colored per session so interleaved sessions stay
-readable. A trailing `↳` on the tag marks a subagent.
+readable. A trailing `↳` on the tag (or `(sub)` with `--text-tag`) marks a subagent.
 
 ## How it works
 

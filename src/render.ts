@@ -7,6 +7,8 @@ export interface RenderOptions {
   /** Show full multi-line text instead of one truncated line per event. */
   full: boolean;
   width: number;
+  /** Plain-text tags like [tool] instead of glyphs. */
+  textTag: boolean;
 }
 
 const esc = (code: string) => (s: string) => `\x1b[${code}m${s}\x1b[0m`;
@@ -30,15 +32,16 @@ const AGENT_COLOR: Record<AgentName, (s: string) => string> = {
   pi: C.magenta,
 };
 
-const KIND: Record<EventKind, { glyph: string; color: (s: string) => string }> = {
-  user: { glyph: "❯", color: (s) => C.bold(C.green(s)) },
-  assistant: { glyph: "●", color: (s) => s },
-  thinking: { glyph: "∴", color: (s) => C.dim(C.italic(s)) },
-  tool: { glyph: "⚙", color: C.yellow },
-  result: { glyph: "↳", color: C.dim },
-  error: { glyph: "✗", color: C.red },
-  meta: { glyph: "·", color: (s) => C.dim(C.magenta(s)) },
+const KIND: Record<EventKind, { glyph: string; tag: string; color: (s: string) => string }> = {
+  user: { glyph: "❯", tag: "[user]", color: (s) => C.bold(C.green(s)) },
+  assistant: { glyph: "●", tag: "[asst]", color: (s) => s },
+  thinking: { glyph: "∴", tag: "[think]", color: (s) => C.dim(C.italic(s)) },
+  tool: { glyph: "⚙", tag: "[tool]", color: C.yellow },
+  result: { glyph: "↳", tag: "[result]", color: C.dim },
+  error: { glyph: "✗", tag: "[error]", color: C.red },
+  meta: { glyph: "·", tag: "[meta]", color: (s) => C.dim(C.magenta(s)) },
 };
+const TAG_WIDTH = 8;
 
 // 256-color palette entries that read well on dark and light backgrounds.
 const SESSION_COLORS = [33, 39, 41, 69, 75, 105, 135, 141, 166, 172, 178, 204, 209, 214];
@@ -82,9 +85,10 @@ function time(d: Date) {
   return d.toTimeString().slice(0, 8);
 }
 
-export function sessionLabel(e: Emitted["session"]) {
+export function sessionLabel(e: Emitted["session"], textTag = false) {
   const tag = `${project(e.cwd)}#${shortId(e.id)}`;
-  return e.parent ? `${tag}↳` : tag;
+  if (!e.parent) return tag;
+  return textTag ? `${tag}(sub)` : `${tag}↳`;
 }
 
 export function render(e: Emitted, o: RenderOptions): string {
@@ -93,14 +97,15 @@ export function render(e: Emitted, o: RenderOptions): string {
   const k = KIND[event.kind];
 
   const agent = session.agent.padEnd(7);
-  const label = sessionLabel(session);
+  const label = sessionLabel(session, o.textTag);
   const prefix =
     `${paint(C.dim, time(event.time))} ` +
     `${paint(AGENT_COLOR[session.agent], agent)} ` +
     `${paint(sessionColor(session.file), label)} `;
   const prefixWidth = 9 + 8 + label.length + 1;
 
-  const head = event.label ? `${k.glyph} ${event.label}` : k.glyph;
+  const mark = o.textTag ? k.tag.padEnd(TAG_WIDTH) : k.glyph;
+  const head = event.label ? `${mark} ${event.label}` : mark;
   const body = event.text.replace(/\r/g, "");
 
   if (!o.full) {

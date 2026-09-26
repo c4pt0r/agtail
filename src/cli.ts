@@ -28,6 +28,7 @@ Options:
       --since <dur>      replay window, e.g. 30s 15m 2h 1d (default 1h; 1d for ls)
       --no-follow        print the replay and exit
   -f, --full             print full multi-line messages
+  -t, --text-tag         text tags like [user] [tool] instead of glyphs
       --json             emit NDJSON events
       --no-color         disable colors
   -h, --help             show this help
@@ -68,6 +69,7 @@ async function main() {
       since: { type: "string" },
       "no-follow": { type: "boolean" },
       full: { type: "boolean", short: "f" },
+      "text-tag": { type: "boolean", short: "t" },
       json: { type: "boolean" },
       "no-color": { type: "boolean" },
       help: { type: "boolean", short: "h" },
@@ -106,6 +108,7 @@ async function main() {
   const ropts = {
     color: Boolean(color),
     full: Boolean(values.full),
+    textTag: Boolean(values["text-tag"]),
     width: process.stdout.isTTY ? process.stdout.columns ?? 120 : 0,
   };
   process.stdout.on("resize", () => (ropts.width = process.stdout.columns ?? 120));
@@ -141,7 +144,7 @@ async function main() {
       keep({ session: r.info, event: { time: r.mtime, kind: "meta", text: "" } }),
     );
     for (const { info, mtime } of rows) {
-      const row = [ago(mtime).padStart(4), info.agent.padEnd(7), sessionLabel(info).padEnd(30), info.title ?? info.cwd ?? ""];
+      const row = [ago(mtime).padStart(4), info.agent.padEnd(7), sessionLabel(info, Boolean(values["text-tag"])).padEnd(30), info.title ?? info.cwd ?? ""];
       process.stdout.write(row.join("  ") + "\n");
     }
     if (!rows.length) process.stdout.write("no active sessions\n");
