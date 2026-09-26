@@ -1,6 +1,6 @@
 {
   "name": "agtail",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "tail -f for local coding agents: follow Claude Code, Codex, ChatGPT desktop and pi sessions live",
   "keywords": [
     "claude-code",
