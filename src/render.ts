@@ -1,0 +1,123 @@
+import type { AgentName, EventKind } from "./types.ts";
+import type { Emitted } from "./tailer.ts";
+import { project, shortId } from "./util.ts";
+
+export interface RenderOptions {
+  color: boolean;
+  /** Show full multi-line text instead of one truncated line per event. */
+  full: boolean;
+  width: number;
+}
+
+const esc = (code: string) => (s: string) => `\x1b[${code}m${s}\x1b[0m`;
+const C = {
+  dim: esc("2"),
+  bold: esc("1"),
+  italic: esc("3"),
+  red: esc("31"),
+  green: esc("32"),
+  yellow: esc("33"),
+  blue: esc("34"),
+  magenta: esc("35"),
+  cyan: esc("36"),
+  orange: esc("38;5;208"),
+};
+
+const AGENT_COLOR: Record<AgentName, (s: string) => string> = {
+  claude: C.orange,
+  codex: C.cyan,
+  chatgpt: C.green,
+  pi: C.magenta,
+};
+
+const KIND: Record<EventKind, { glyph: string; color: (s: string) => string }> = {
+  user: { glyph: "❯", color: (s) => C.bold(C.green(s)) },
+  assistant: { glyph: "●", color: (s) => s },
+  thinking: { glyph: "∴", color: (s) => C.dim(C.italic(s)) },
+  tool: { glyph: "⚙", color: C.yellow },
+  result: { glyph: "↳", color: C.dim },
+  error: { glyph: "✗", color: C.red },
+  meta: { glyph: "·", color: (s) => C.dim(C.magenta(s)) },
+};
+
+// 256-color palette entries that read well on dark and light backgrounds.
+const SESSION_COLORS = [33, 39, 41, 69, 75, 105, 135, 141, 166, 172, 178, 204, 209, 214];
+function sessionColor(key: string) {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
+  return esc(`38;5;${SESSION_COLORS[Math.abs(h) % SESSION_COLORS.length]}`);
+}
+
+function charWidth(cp: number): number {
+  if (cp < 0x20 || (cp >= 0x7f && cp < 0xa0)) return 0;
+  if (
+    (cp >= 0x1100 && cp <= 0x115f) ||
+    (cp >= 0x2e80 && cp <= 0xa4cf) ||
+    (cp >= 0xac00 && cp <= 0xd7a3) ||
+    (cp >= 0xf900 && cp <= 0xfaff) ||
+    (cp >= 0xfe30 && cp <= 0xfe4f) ||
+    (cp >= 0xff00 && cp <= 0xff60) ||
+    (cp >= 0xffe0 && cp <= 0xffe6) ||
+    (cp >= 0x1f300 && cp <= 0x1faff) ||
+    (cp >= 0x20000 && cp <= 0x3fffd)
+  )
+    return 2;
+  return 1;
+}
+
+function truncate(s: string, width: number): string {
+  if (width <= 1) return "";
+  let w = 0;
+  let out = "";
+  for (const ch of s) {
+    const cw = charWidth(ch.codePointAt(0)!);
+    if (w + cw > width - 1) return out + "…";
+    out += ch;
+    w += cw;
+  }
+  return out;
+}
+
+function time(d: Date) {
+  return d.toTimeString().slice(0, 8);
+}
+
+export function sessionLabel(e: Emitted["session"]) {
+  const tag = `${project(e.cwd)}#${shortId(e.id)}`;
+  return e.parent ? `${tag}↳` : tag;
+}
+
+export function render(e: Emitted, o: RenderOptions): string {
+  const paint = (f: (s: string) => string, s: string) => (o.color ? f(s) : s);
+  const { session, event } = e;
+  const k = KIND[event.kind];
+
+  const agent = session.agent.padEnd(7);
+  const label = sessionLabel(session);
+  const prefix =
+    `${paint(C.dim, time(event.time))} ` +
+    `${paint(AGENT_COLOR[session.agent], agent)} ` +
+    `${paint(sessionColor(session.file), label)} `;
+  const prefixWidth = 9 + 8 + label.length + 1;
+
+  const head = event.label ? `${k.glyph} ${event.label}` : k.glyph;
+  const body = event.text.replace(/\r/g, "");
+
+  if (!o.full) {
+    const one = body.replace(/\s+/g, " ").trim();
+    const room = o.width - prefixWidth - head.length - 1;
+    const text = o.width > 0 ? truncate(one, Math.max(room, 20)) : one;
+    return `${prefix}${paint(k.color, head)} ${paint(k.color, text)}`;
+  }
+
+  const indent = " ".repeat(Math.min(prefixWidth, 24)) + "  ";
+  let lines = body.split("\n");
+  if (event.kind === "result" && lines.length > 20) {
+    lines = [...lines.slice(0, 20), `… ${lines.length - 20} more lines`];
+  }
+  const [first, ...rest] = lines;
+  return [
+    `${prefix}${paint(k.color, head)} ${paint(k.color, first ?? "")}`,
+    ...rest.map((l) => indent + paint(k.color, l)),
+  ].join("\n");
+}
