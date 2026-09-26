@@ -9,6 +9,8 @@ export interface Emitted {
   event: AgentEvent;
   /** The original transcript record; set only in raw mode. */
   record?: unknown;
+  /** Raw mode: the events parsed from `record`, so callers can still match on content. */
+  parsed?: AgentEvent[];
 }
 
 interface Tracked {
@@ -198,7 +200,7 @@ export class Tailer {
       if (this.opts.raw) {
         const ts = rec?.timestamp ?? rec?.payload?.timestamp;
         if (ts !== undefined) last = toDate(ts);
-        out.push({ session: info, event: { time: last, kind: "meta", text: "" }, record: rec });
+        out.push({ session: info, event: { time: last, kind: "meta", text: "" }, record: rec, parsed: events });
         continue;
       }
       for (const event of events) {

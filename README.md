@@ -68,7 +68,9 @@ $ agtail ls
 ### Searching history
 
 ```sh
-agtail grep kubernetes        # every session (any agent, all history) mentioning a keyword
+agtail grep kubernetes        # every session (any agent, all history) mentioning a keyword,
+                             # then keep streaming new matches live (like tail -f | grep)
+agtail grep deploy --no-follow   # search history only, then exit
 agtail grep -l stripe        # just list matching sessions: agent, full session id, count
 agtail grep -E 'api[_-]?key' -k user          # regex, only in what you typed
 agtail grep deploy --show    # print each matching session in full
@@ -81,6 +83,11 @@ $ agtail grep -l helloworld
 2026-08-11 10:12:53 (46d)   pi       019ff1cf-9270-72ef-be2f-b487189ec165    2 matches    /Users/me/16nx
 2026-09-26 14:02:29 (2h)    chatgpt  01a0df86-ba6b-74b0-82d1-ceccceacd6da    1 match      /Users/me/Documents/Codex/new-chat
 ```
+
+After the history results, `grep` keeps watching and prints each new match as it is written:
+with `-l` it lists sessions as they first match, with `--show` it streams every new event of
+matching sessions, and with `-o jsonl` it emits new matching events. Use `--no-follow` to stop
+after the history.
 
 Matching is case-insensitive and covers messages, thinking, tool calls (including their full
 input) and tool results. `grep` shows up to `--max` (default 5) matching lines per session, each

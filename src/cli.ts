@@ -13,7 +13,8 @@ const HELP = `agtail — tail -f for local coding agents
 Usage:
   agtail [options]          follow all agent sessions live
   agtail ls [options]       list recently active sessions
-  agtail grep <keyword>     find sessions containing <keyword> (all history)
+  agtail grep <keyword>     find sessions containing <keyword> (all history),
+                            then keep printing new matches live
   agtail show <session-id>  print a whole session from the start
 
 Agents: claude (Claude Code), codex (Codex CLI), chatgpt (ChatGPT/Codex
@@ -29,7 +30,7 @@ Options:
       --no-subagents     hide subagent / sidechain sessions
   -n, --lines <n>        replay last <n> events on start (default 20)
       --since <dur>      replay window, e.g. 30s 15m 2h 1d (default 1h; 1d for ls)
-      --no-follow        print the replay and exit
+      --no-follow        print the replay (or grep's history results) and exit
   -f, --full             print full multi-line messages
                          (tool results capped at 20 lines)
   -F, --full-content     print everything untruncated: whole messages,
@@ -229,7 +230,7 @@ async function main() {
       return;
     }
 
-    // grep
+    // grep: matches from history, then new ones as they are written (like tail -f | grep)
     if (raw && !values.show) {
       process.stderr.write("agtail grep: -o raw needs --show (raw records are printed per session)\n");
       process.exit(2);
@@ -241,6 +242,22 @@ async function main() {
       process.stderr.write(`agtail grep: bad regex: ${(err as Error).message}\n`);
       process.exit(2);
     }
+    const follow = !values["no-follow"];
+    const sid = (s: Emitted["session"]) => `${s.agent}:${s.id}`;
+    const evKey = (e: Emitted) =>
+      `${e.session.file}|${e.event.time.getTime()}|${e.event.kind}|${e.event.text}|${e.record ? JSON.stringify(e.record) : ""}`;
+    const isHit = (e: Emitted) =>
+      raw ? sessionOk(e.session) && (e.parsed ?? []).some((ev) => m.test(ev)) : keep(e) && m.test(e.event);
+
+    // Watch before reading history so nothing written in between is lost; events
+    // that arrive meanwhile wait until history is printed and are de-duplicated.
+    const pending: Emitted[] = [];
+    let live: ((e: Emitted) => void) | undefined;
+    const watcher = follow
+      ? new Tailer({ sources, sinceMs: 0, raw, onEvent: (e) => (live ? live(e) : pending.push(e)) })
+      : undefined;
+    await watcher?.start();
+
     const sessions = mergeSessions(
       await new Tailer({ sources, sinceMs: 0, onEvent: () => {} }).readAll({
         sinceMs: since,
@@ -255,12 +272,26 @@ async function main() {
 
     if (!hits.length) {
       process.stderr.write(`no sessions contain "${arg}"\n`);
-      process.exit(1);
+      if (!follow) process.exit(1);
     }
 
+    const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : w.endsWith("h") ? "es" : "s"}`;
+    const max = Number(values.max);
+    const listRow = (info: Emitted["session"], n: number, last: Date) => {
+      const row = [`${stamp(last)} ${`(${ago(last)})`.padEnd(6)}`, info.agent.padEnd(7), info.id.padEnd(38), plural(n, "match").padEnd(11), info.cwd ?? ""];
+      process.stdout.write(row.join("  ") + "\n");
+    };
+    const matchLine = (e: Emitted) => {
+      // one line centred on the match; the tool name stays in the label
+      const text = snippet(haystack({ ...e.event, label: undefined }), m);
+      const line = render({ ...e, event: { ...e.event, text, input: undefined } }, { ...ropts, full: false, fullContent: false });
+      process.stdout.write((color ? highlight(line, m) : line) + "\n");
+    };
+
+    const seen = new Set<string>();
     if (values.show) {
       let rawById: Map<string, Emitted[]> | undefined;
-      if (raw) {
+      if (raw && hits.length) {
         // re-read every file of each hit session (resumed codex sessions span several)
         const ids = new Set(hits.map((h) => h.info.id));
         const rawSessions = mergeSessions(
@@ -271,40 +302,73 @@ async function main() {
         rawById = new Map(rawSessions.map((s) => [s.info.id, s.events]));
       }
       for (const h of hits) {
-        header(h.info, `${h.matches.length} matches`);
-        printSession(rawById?.get(h.info.id) ?? h.events);
+        const events = rawById?.get(h.info.id) ?? h.events;
+        for (const e of events) seen.add(evKey(e));
+        header(h.info, plural(h.matches.length, "match"));
+        printSession(events);
         if (output === "text") process.stdout.write("\n");
       }
-      return;
-    }
-
-    if (output === "jsonl") {
-      for (const h of hits) for (const e of h.matches) print(e);
-      return;
-    }
-
-    const max = Number(values.max);
-    for (const h of hits) {
-      const n = h.matches.length;
-      if (values.list) {
-        const last = h.matches.at(-1)!.event.time;
-        const row = [`${stamp(last)} ${`(${ago(last)})`.padEnd(6)}`, h.info.agent.padEnd(7), h.info.id.padEnd(38), `${n} match${n > 1 ? "es" : ""}`.padEnd(11), h.info.cwd ?? ""];
-        process.stdout.write(row.join("  ") + "\n");
-        continue;
+    } else {
+      for (const h of hits) {
+        for (const e of h.matches) seen.add(evKey(e));
+        const n = h.matches.length;
+        if (output === "jsonl") {
+          for (const e of h.matches) print(e);
+        } else if (values.list) {
+          listRow(h.info, n, h.matches.at(-1)!.event.time);
+        } else {
+          header(h.info, plural(n, "match"));
+          for (const e of h.matches.slice(-max)) matchLine(e);
+          if (n > max) process.stdout.write(`   … ${n - max} earlier matches; agtail show ${h.info.id.slice(0, 8)}\n`);
+          process.stdout.write("\n");
+        }
       }
-      header(h.info, `${n} match${n > 1 ? "es" : ""}`);
-      for (const e of h.matches.slice(-max)) {
-        // one line centred on the match; the tool name stays in the label
-        const text = snippet(haystack({ ...e.event, label: undefined }), m);
-        const line = render({ ...e, event: { ...e.event, text, input: undefined } }, { ...ropts, full: false, fullContent: false });
-        process.stdout.write((color ? highlight(line, m) : line) + "\n");
-      }
-      if (n > max) process.stdout.write(`   … ${n - max} earlier matches; agtail show ${h.info.id.slice(0, 8)}\n`);
-      process.stdout.write("\n");
     }
-    const total = hits.reduce((a, h) => a + h.matches.length, 0);
-    const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : w.endsWith("h") ? "es" : "s"}`;
-    process.stderr.write(`${plural(total, "match")} in ${plural(hits.length, "session")}\n`);
+    if (hits.length && output === "text") {
+      const total = hits.reduce((a, h) => a + h.matches.length, 0);
+      process.stderr.write(`${plural(total, "match")} in ${plural(hits.length, "session")}\n`);
+    }
+    if (!watcher) return;
+
+    if (output === "text" && process.stderr.isTTY) {
+      process.stderr.write((color ? "\x1b[2m" : "") + `— following new matches for "${arg}" (ctrl-c to stop) —` + (color ? "\x1b[0m" : "") + "\n");
+    }
+    const matched = new Map(hits.map((h) => [sid(h.info), h.matches.length]));
+    let lastHeader: string | undefined;
+    live = (e) => {
+      if (seen.has(evKey(e))) return;
+      const id = sid(e.session);
+      const hit = isHit(e);
+      if (values.show) {
+        // stream every event of sessions that have matched; a session that
+        // first matches now starts streaming from this event
+        if (hit && !matched.has(id)) {
+          matched.set(id, 1);
+          header(e.session, "new match");
+        }
+        if (matched.has(id) && keep(e)) print(e);
+        return;
+      }
+      if (!hit) return;
+      const n = (matched.get(id) ?? 0) + 1;
+      matched.set(id, n);
+      if (output === "jsonl") {
+        print(e);
+      } else if (values.list) {
+        if (n === 1) listRow(e.session, n, e.event.time);
+      } else {
+        if (lastHeader !== id) header(e.session, "live");
+        lastHeader = id;
+        matchLine(e);
+      }
+    };
+    for (const e of pending.splice(0)) live(e);
+    const bye = () => {
+      watcher.stop();
+      process.exit(0);
+    };
+    process.on("SIGINT", bye);
+    process.on("SIGTERM", bye);
   }
 
   if (isLs) {
