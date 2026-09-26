@@ -68,7 +68,7 @@ $ agtail ls
 ### Searching history
 
 ```sh
-agtail grep kubernetes        # every session (any agent, all history) mentioning a keyword,
+agtail grep kubernetes       # every session (any agent, all history) mentioning a keyword,
                              # then keep streaming new matches live (like tail -f | grep)
 agtail grep deploy --no-follow   # search history only, then exit
 agtail grep -l stripe        # just list matching sessions: agent, full session id, count

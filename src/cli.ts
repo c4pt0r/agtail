@@ -243,6 +243,11 @@ async function main() {
       process.exit(2);
     }
     const follow = !values["no-follow"];
+    const started = performance.now();
+    const took = () => {
+      const ms = performance.now() - started;
+      return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(2)}s`;
+    };
     const sid = (s: Emitted["session"]) => `${s.agent}:${s.id}`;
     const evKey = (e: Emitted) =>
       `${e.session.file}|${e.event.time.getTime()}|${e.event.kind}|${e.event.text}|${e.record ? JSON.stringify(e.record) : ""}`;
@@ -271,7 +276,7 @@ async function main() {
       .sort((a, b) => a.matches.at(-1)!.event.time.getTime() - b.matches.at(-1)!.event.time.getTime());
 
     if (!hits.length) {
-      process.stderr.write(`no sessions contain "${arg}"\n`);
+      process.stderr.write(`no sessions contain "${arg}" (${took()})\n`);
       if (!follow) process.exit(1);
     }
 
@@ -326,7 +331,7 @@ async function main() {
     }
     if (hits.length && output === "text") {
       const total = hits.reduce((a, h) => a + h.matches.length, 0);
-      process.stderr.write(`${plural(total, "match")} in ${plural(hits.length, "session")}\n`);
+      process.stderr.write(`${plural(total, "match")} in ${plural(hits.length, "session")} (${took()})\n`);
     }
     if (!watcher) return;
 
