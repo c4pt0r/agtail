@@ -78,13 +78,13 @@ agtail show fb1dd6ac -q -f   # …only the conversation, full messages
 
 ```console
 $ agtail grep -l helloworld
- 26d  pi       019ff1cf-9270-72ef-be2f-b487189ec165    1 match      /Users/me/16nx
-  4h  chatgpt  01a0df86-ba6b-74b0-82d1-ceccceacd6da    1 match      /Users/me/Documents/Codex/new-chat
+2026-08-11 10:12:53 (46d)   pi       019ff1cf-9270-72ef-be2f-b487189ec165    2 matches    /Users/me/16nx
+2026-09-26 14:02:29 (2h)    chatgpt  01a0df86-ba6b-74b0-82d1-ceccceacd6da    1 match      /Users/me/Documents/Codex/new-chat
 ```
 
 Matching is case-insensitive and covers messages, thinking, tool calls (including their full
 input) and tool results. `grep` shows up to `--max` (default 5) matching lines per session, each
-cut down to the text around the match, with the match highlighted. `-a`, `-p`, `-k` and `--since`
+cut down to the text around the match, with the match highlighted. Every line carries the full local date and time. `-a`, `-p`, `-k` and `--since`
 narrow both commands, and `-o jsonl` / `-o raw` work with them too. Codex sessions that were
 resumed into several files are merged back into one.
 
