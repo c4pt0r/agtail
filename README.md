@@ -84,13 +84,35 @@ agtail -F                   # --full-content: nothing truncated, complete tool-c
 agtail -t                   # text tags ([user] [tool] …) instead of glyphs
 agtail -n 100 --since 1d    # bigger replay window
 agtail --no-follow          # print the replay and exit, like plain `tail`
-agtail --json | jq -r 'select(.kind=="error") | "\(.agent) \(.cwd): \(.text)"'
 ```
 
-JSON events look like this:
+### Machine-readable output
+
+`-o, --output <fmt>` picks the format: `text` (default), `jsonl` or `raw`.
+
+**`jsonl`** (also `--json` / `--jsonl`) prints one normalized event per line. The shape is the
+same for every agent, and all filters apply:
+
+```sh
+agtail -o jsonl | jq -r 'select(.kind=="error") | "\(.agent) \(.cwd): \(.text)"'
+```
 
 ```json
 {"time":"2026-09-26T21:02:14.000Z","agent":"claude","session":"3f9a1c20-…","cwd":"/src/api","kind":"tool","label":"Bash","text":"npm test -- auth/login.spec.ts"}
+```
+
+Add `-F` to include each tool call's complete arguments as an `input` field.
+
+**`raw`** prints every transcript line exactly as the agent wrote it, wrapped with where it came
+from. Use it to archive sessions or to build your own parser. `-a`, `-p`, `-s` and
+`--no-subagents` apply; `-k` / `-q` don't, because raw records have no event kind.
+
+```sh
+agtail -o raw >> all-agents.jsonl
+```
+
+```json
+{"agent":"codex","session":"019faf79-…","cwd":"/src/web","file":"/Users/me/.codex/sessions/…/rollout-….jsonl","record":{"timestamp":"…","type":"response_item","payload":{…}}}
 ```
 
 ### Reading the stream

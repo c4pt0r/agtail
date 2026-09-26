@@ -2,10 +2,13 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import type { AgentEvent, SessionInfo, Source } from "./types.ts";
+import { toDate } from "./util.ts";
 
 export interface Emitted {
   session: SessionInfo;
   event: AgentEvent;
+  /** The original transcript record; set only in raw mode. */
+  record?: unknown;
 }
 
 interface Tracked {
@@ -25,6 +28,8 @@ export interface TailerOptions {
   /** Max bytes read from the end of each file for replay. */
   backlogBytes?: number;
   rescanMs?: number;
+  /** Emit every transcript record as-is (one Emitted per line) instead of parsed events. */
+  raw?: boolean;
   onEvent: (e: Emitted) => void;
 }
 
@@ -153,15 +158,24 @@ export class Tailer {
 
   private parseLines(t: Tracked, info: SessionInfo, lines: string[]): Emitted[] {
     const out: Emitted[] = [];
+    let last = new Date(0);
     for (const line of lines) {
       if (!line.trim()) continue;
-      let rec: unknown;
+      let rec: any;
       try {
         rec = JSON.parse(line);
       } catch {
         continue;
       }
-      for (const event of t.src.parse(rec, info)) {
+      // parse even in raw mode: it keeps session info (cwd, agent, title) current
+      const events = t.src.parse(rec, info);
+      if (this.opts.raw) {
+        const ts = rec?.timestamp ?? rec?.payload?.timestamp;
+        if (ts !== undefined) last = toDate(ts);
+        out.push({ session: info, event: { time: last, kind: "meta", text: "" }, record: rec });
+        continue;
+      }
+      for (const event of events) {
         if (event.text || event.label) out.push({ session: info, event });
       }
     }

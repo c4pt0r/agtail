@@ -32,7 +32,10 @@ Options:
   -F, --full-content     print everything untruncated: whole messages,
                          whole tool results, complete tool-call input
   -t, --text-tag         text tags like [user] [tool] instead of glyphs
-      --json             emit NDJSON events
+  -o, --output <fmt>     text (default), jsonl (parsed events, one JSON
+                         object per line) or raw (original transcript
+                         records, tagged with agent and session)
+      --json, --jsonl    same as -o jsonl
       --no-color         disable colors
   -h, --help             show this help
 
@@ -74,7 +77,9 @@ async function main() {
       full: { type: "boolean", short: "f" },
       "full-content": { type: "boolean", short: "F" },
       "text-tag": { type: "boolean", short: "t" },
+      output: { type: "string", short: "o", default: "text" },
       json: { type: "boolean" },
+      jsonl: { type: "boolean" },
       "no-color": { type: "boolean" },
       help: { type: "boolean", short: "h" },
     },
@@ -83,6 +88,13 @@ async function main() {
     process.stdout.write(HELP);
     return;
   }
+
+  const output = values.json || values.jsonl ? "jsonl" : values.output!;
+  if (!["text", "jsonl", "raw"].includes(output)) {
+    process.stderr.write(`agtail: unknown output format "${output}" (text, jsonl, raw)\n`);
+    process.exit(2);
+  }
+  const raw = output === "raw";
 
   const agents = list(values.agent) as AgentName[] | undefined;
   const kinds = (values.quiet ? ["user", "assistant", "error"] : list(values.kinds)) as
@@ -104,11 +116,12 @@ async function main() {
     if (values.project && !(s.cwd ?? "").includes(values.project)) return false;
     if (values.session && !s.id.startsWith(values.session)) return false;
     if (values["no-subagents"] && s.parent) return false;
-    if (kinds && !kinds.includes(e.event.kind)) return false;
+    // raw records have no event kind, so -k / -q don't apply to them
+    if (kinds && !raw && !kinds.includes(e.event.kind)) return false;
     return true;
   };
 
-  const color = !values["no-color"] && !values.json && !process.env.NO_COLOR && process.stdout.isTTY;
+  const color = !values["no-color"] && output === "text" && !process.env.NO_COLOR && process.stdout.isTTY;
   const ropts = {
     color: Boolean(color),
     full: Boolean(values.full),
@@ -124,7 +137,12 @@ async function main() {
 
   const print = (e: Emitted) => {
     if (!keep(e)) return;
-    if (values.json) {
+    if (raw) {
+      const s = e.session;
+      process.stdout.write(
+        JSON.stringify({ agent: s.agent, session: s.id, cwd: s.cwd, parent: s.parent, file: s.file, record: e.record }) + "\n",
+      );
+    } else if (output === "jsonl") {
       const { session: s, event: ev } = e;
       process.stdout.write(
         JSON.stringify({
@@ -161,7 +179,7 @@ async function main() {
     process.exit(2);
   }
 
-  const tailer = new Tailer({ sources, sinceMs, onEvent: print });
+  const tailer = new Tailer({ sources, sinceMs, raw, onEvent: print });
   const backlog = (await tailer.start()).filter(keep);
   for (const e of lines > 0 ? backlog.slice(-lines) : []) print(e);
 
@@ -169,7 +187,7 @@ async function main() {
     tailer.stop();
     return;
   }
-  if (!values.json && process.stderr.isTTY) {
+  if (output === "text" && process.stderr.isTTY) {
     process.stderr.write(
       (color ? "\x1b[2m" : "") + `— following ${sources.map((s) => s.agent).join(", ")} sessions (ctrl-c to stop) —` + (color ? "\x1b[0m" : "") + "\n",
     );
