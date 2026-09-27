@@ -26,9 +26,9 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node --input-type=module -e \"import fs from 'node:fs'; fs.mkdirSync('dist/web',{recursive:true}); fs.copyFileSync('src/web/index.html','dist/web/index.html')\"",
     "dev": "node src/cli.ts",
-    "prepare": "tsc",
+    "prepare": "tsc && node --input-type=module -e \"import fs from 'node:fs'; fs.mkdirSync('dist/web',{recursive:true}); fs.copyFileSync('src/web/index.html','dist/web/index.html')\"",
     "typecheck": "tsc --noEmit"
   },
   "engines": {

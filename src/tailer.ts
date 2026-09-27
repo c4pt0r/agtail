@@ -126,13 +126,17 @@ export class Tailer {
    * `content` let callers skip files cheaply before any JSON is parsed.
    */
   async readAll(
-    filter: { sinceMs?: number; file?: (file: string) => boolean; content?: (text: string) => boolean } = {},
-  ): Promise<{ info: SessionInfo; mtime: Date; events: Emitted[] }[]> {
+    filter: {
+      sinceMs?: number;
+      file?: (file: string, stat: fs.Stats) => boolean;
+      content?: (text: string) => boolean;
+    } = {},
+  ): Promise<{ src: Source; info: SessionInfo; mtime: Date; size: number; events: Emitted[] }[]> {
     const now = Date.now();
-    const out: { info: SessionInfo; mtime: Date; events: Emitted[] }[] = [];
+    const out: { src: Source; info: SessionInfo; mtime: Date; size: number; events: Emitted[] }[] = [];
     for (const { src, file, stat } of await this.discover()) {
       if (filter.sinceMs !== undefined && now - stat.mtimeMs > filter.sinceMs) continue;
-      if (filter.file && !filter.file(file)) continue;
+      if (filter.file && !filter.file(file, stat)) continue;
       let text: string;
       try {
         text = await fsp.readFile(file, "utf8");
@@ -142,7 +146,7 @@ export class Tailer {
       if (filter.content && !filter.content(text)) continue;
       const t = this.track(src, file, stat);
       const info = await this.ensureInfo(t);
-      out.push({ info, mtime: stat.mtime, events: this.parseLines(t, info, text.split("\n")) });
+      out.push({ src, info, mtime: stat.mtime, size: stat.size, events: this.parseLines(t, info, text.split("\n")) });
     }
     return out;
   }
@@ -150,6 +154,11 @@ export class Tailer {
   stop() {
     for (const w of this.watchers) w.close();
     if (this.timer) clearInterval(this.timer);
+  }
+
+  /** Every session file under the sources' roots. */
+  listFiles() {
+    return this.discover();
   }
 
   private async discover() {

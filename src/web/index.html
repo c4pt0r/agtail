@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>agtail</title>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --panel-2: #f1f1ee; --text: #1d1d1b; --muted: #6b6b66;
+  --border: #e3e3de; --accent: #2f6fde; --accent-text: #ffffff; --mark: #ffe58a; --mark-text: #1d1d1b;
+  --user: #1f8a4c; --tool: #a86400; --error: #c93434; --meta: #8b5cc6; --shadow: 0 10px 30px rgba(0,0,0,.12);
+  --claude: #c8602f; --codex: #0b8fa3; --chatgpt: #0f8f6c; --pi: #8b4fd6;
+  --ok: #1f8a4c; --warn: #a86400; --bad: #c93434;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141414; --panel: #1c1c1b; --panel-2: #242423; --text: #e8e8e4; --muted: #9a9a93;
+    --border: #2f2f2d; --accent: #5b93f0; --accent-text: #0e0e0e; --mark: #6b5a12; --mark-text: #fff4c2;
+    --user: #57c98a; --tool: #e0a348; --error: #f07070; --meta: #b891ef; --shadow: 0 10px 30px rgba(0,0,0,.5);
+    --claude: #e8875a; --codex: #3cc3d6; --chatgpt: #3fcf9f; --pi: #b98af2;
+    --ok: #57c98a; --warn: #e0a348; --bad: #f07070;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); }
+body { font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.mono, code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+a { color: var(--accent); }
+
+header.top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 20px; padding: 0 20px;
+  height: 52px; background: var(--panel); border-bottom: 1px solid var(--border); }
+.brand { font-weight: 700; letter-spacing: -.01em; font-size: 16px; white-space: nowrap; }
+.brand span { color: var(--muted); font-weight: 400; margin-left: 6px; font-size: 13px; }
+nav.tabs { display: flex; gap: 2px; height: 100%; }
+nav.tabs button { border: 0; background: none; padding: 0 12px; height: 100%; color: var(--muted);
+  border-bottom: 2px solid transparent; font-weight: 500; }
+nav.tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.top .stats { margin-left: auto; color: var(--muted); font-size: 13px; white-space: nowrap; }
+
+main { max-width: 1280px; margin: 0 auto; padding: 18px 20px 60px; }
+section[hidden] { display: none; }
+
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.toolbar .grow { flex: 1 1 220px; }
+.field { height: 34px; padding: 0 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); min-width: 0; }
+.field:focus { outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); outline-offset: 0; border-color: var(--accent); }
+.btn { height: 34px; padding: 0 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); white-space: nowrap; }
+.btn:hover:not(:disabled) { background: var(--panel-2); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+.btn.primary:hover:not(:disabled) { filter: brightness(1.07); background: var(--accent); }
+.btn:disabled { opacity: .5; cursor: default; }
+.chips { display: flex; gap: 4px; flex-wrap: wrap; }
+.chip { height: 30px; padding: 0 10px; border-radius: 99px; border: 1px solid var(--border); background: var(--panel); color: var(--muted); font-size: 13px; }
+.chip[aria-pressed="true"] { color: var(--text); border-color: var(--text); }
+.chip .n { opacity: .6; margin-left: 4px; }
+.check { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; white-space: nowrap; }
+
+.badge { display: inline-block; padding: 1px 7px; border-radius: 5px; font-size: 12px; font-weight: 600; color: #fff; }
+.badge.claude { background: var(--claude); } .badge.codex { background: var(--codex); }
+.badge.chatgpt { background: var(--chatgpt); } .badge.pi { background: var(--pi); }
+@media (prefers-color-scheme: dark) { .badge { color: #111; } }
+
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+table.list { width: 100%; border-collapse: collapse; }
+.list th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12.5px; padding: 9px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.list td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.list tr:last-child td { border-bottom: 0; }
+.list tbody tr { cursor: pointer; }
+.list tbody tr:hover { background: var(--panel-2); }
+.list .when { white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
+.list .num { text-align: right; white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
+.list .proj { white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.list .what { max-width: 0; width: 100%; }
+.list .what div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list .what .sub { color: var(--muted); font-size: 12.5px; }
+.list input[type=checkbox] { width: 16px; height: 16px; margin: 2px 0 0; }
+.more { display: block; margin: 12px auto 0; }
+.empty { padding: 40px 20px; text-align: center; color: var(--muted); }
+
+.results { display: grid; gap: 10px; }
+.hit { padding: 12px 14px; cursor: pointer; }
+.hit:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
+.hit .head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; margin-bottom: 6px; }
+.hit .head .t { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 200px; }
+.hit .head .meta { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.line { display: grid; grid-template-columns: 138px 18px 1fr; gap: 6px; font-size: 13px; padding: 2px 0; }
+.line .when { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.line .txt { min-width: 0; overflow-wrap: anywhere; color: var(--muted); }
+.line .txt b { color: var(--text); font-weight: 600; margin-right: 6px; }
+mark { background: var(--mark); color: var(--mark-text); border-radius: 2px; padding: 0 1px; }
+.summary { color: var(--muted); margin: 4px 0 12px; font-size: 13px; }
+
+.k-user { color: var(--user); } .k-tool { color: var(--tool); } .k-error { color: var(--error); }
+.k-meta { color: var(--meta); } .k-thinking, .k-result { color: var(--muted); }
+
+.drop { border: 2px dashed var(--border); border-radius: 12px; padding: 44px 20px; text-align: center; color: var(--muted); background: var(--panel); }
+.drop.over { border-color: var(--accent); color: var(--text); }
+.drop strong { color: var(--text); display: block; font-size: 16px; margin-bottom: 4px; }
+.drop p { margin: 4px 0 14px; }
+.status { font-size: 12px; font-weight: 600; padding: 1px 7px; border-radius: 5px; border: 1px solid currentColor; white-space: nowrap; }
+.s-new, .s-imported, .s-update, .s-updated { color: var(--ok); } .s-same, .s-older { color: var(--muted); }
+.s-conflict { color: var(--warn); } .s-invalid { color: var(--bad); }
+.note { color: var(--muted); font-size: 13px; margin: 10px 0; }
+.counts { display: flex; flex-wrap: wrap; gap: 14px; margin: 14px 0 10px; font-size: 13px; }
+
+/* viewer drawer */
+.scrim { position: fixed; inset: 0; background: rgba(0,0,0,.28); z-index: 20; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(980px, 100%); z-index: 21; background: var(--bg);
+  box-shadow: var(--shadow); display: flex; flex-direction: column; }
+.drawer header { padding: 14px 18px 10px; background: var(--panel); border-bottom: 1px solid var(--border); }
+.drawer .row1 { display: flex; gap: 10px; align-items: center; }
+.drawer .row1 h2 { font-size: 16px; margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drawer .facts { color: var(--muted); font-size: 12.5px; margin: 6px 0 10px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.drawer .facts .mono { font-size: 12px; }
+.drawer .row2 { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.drawer .row2 .find { flex: 1 1 200px; }
+.x { width: 34px; padding: 0; font-size: 18px; line-height: 1; }
+.events { overflow: auto; padding: 8px 18px 40px; flex: 1; }
+.ev { display: grid; grid-template-columns: 70px 18px 1fr; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border); content-visibility: auto; contain-intrinsic-size: auto 40px; }
+.ev .when { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; padding-top: 1px; }
+.ev .glyph { text-align: center; }
+.ev .body { min-width: 0; }
+.ev .label { font-weight: 600; margin-right: 6px; }
+.ev pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: inherit; font-size: 13.5px; }
+.ev.k-tool pre, .ev.k-result pre, .ev.k-error pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+.ev.k-assistant pre { color: var(--text); }
+.ev.k-thinking pre { font-style: italic; }
+.ev.clamp pre { max-height: 16em; overflow: hidden; -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
+.ev .expand { border: 0; background: none; color: var(--accent); padding: 2px 0; font-size: 12.5px; }
+.ev details { margin-top: 4px; }
+.ev summary { color: var(--muted); font-size: 12.5px; cursor: pointer; }
+.ev details pre { background: var(--panel-2); padding: 8px; border-radius: 6px; margin-top: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+.day { position: sticky; top: 0; background: var(--bg); color: var(--muted); font-size: 12px; font-weight: 600; padding: 10px 0 4px; z-index: 1; }
+.ev.current { background: color-mix(in srgb, var(--mark) 25%, transparent); }
+.trunc { color: var(--warn); font-size: 12px; }
+
+.toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--text); color: var(--bg);
+  padding: 9px 14px; border-radius: 8px; font-size: 13px; z-index: 40; box-shadow: var(--shadow); max-width: calc(100% - 32px); }
+.toast.err { background: var(--error); color: #fff; }
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 760px) {
+  header.top { gap: 10px; padding: 0 16px; overflow-x: auto; }
+  .brand span, .top .stats { display: none; }
+  main { padding: 14px 16px 60px; }
+  .list .hide-sm { display: none; }
+  .list .proj { max-width: 90px; }
+  .line { grid-template-columns: 18px 1fr; } .line .when { display: none; }
+  .ev { grid-template-columns: 18px 1fr; } .ev .when { display: none; }
+  .drawer header, .events { padding-left: 16px; padding-right: 16px; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">agtail<span>coding agent sessions</span></div>
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="sessions" aria-selected="true">Sessions</button>
+    <button role="tab" data-tab="search" aria-selected="false">Search</button>
+    <button role="tab" data-tab="import" aria-selected="false">Import</button>
+  </nav>
+  <div class="stats" id="stats"></div>
+</header>
+
+<main>
+  <section id="tab-sessions">
+    <div class="toolbar">
+      <input class="field grow" id="filter" type="search" placeholder="Filter by project, title, prompt or id" autocomplete="off">
+      <select class="field" id="since" aria-label="Last active">
+        <option value="0">Any time</option><option value="1">Last 24 hours</option>
+        <option value="7">Last 7 days</option><option value="30">Last 30 days</option>
+      </select>
+      <label class="check"><input type="checkbox" id="subagents"> Subagents</label>
+    </div>
+    <div class="toolbar">
+      <div class="chips" id="agent-chips"></div>
+      <div style="margin-left:auto; display:flex; gap:8px; flex-wrap:wrap">
+        <button class="btn" id="backup-shown">Back up all shown</button>
+        <button class="btn primary" id="backup-selected" disabled>Back up selected</button>
+      </div>
+    </div>
+    <div class="card" id="session-table"></div>
+  </section>
+
+  <section id="tab-search" hidden>
+    <form class="toolbar" id="search-form">
+      <input class="field grow" id="q" type="search" placeholder="Search every session: a keyword, a file name, an error…" autocomplete="off">
+      <select class="field" id="kind" aria-label="Search in">
+        <option value="">Everything</option>
+        <option value="user">What I typed</option>
+        <option value="assistant">Agent replies</option>
+        <option value="tool">Tool calls</option>
+        <option value="result,error">Tool output &amp; errors</option>
+      </select>
+      <select class="field" id="search-agent" aria-label="Agent"><option value="">All agents</option></select>
+      <label class="check"><input type="checkbox" id="regex"> Regex</label>
+      <button class="btn primary">Search</button>
+    </form>
+    <div class="summary" id="search-summary"></div>
+    <div class="results" id="results"></div>
+  </section>
+
+  <section id="tab-import" hidden>
+    <div class="drop" id="drop">
+      <strong>Drop a backup or a session file here</strong>
+      <p>An agtail backup (<span class="mono">.tar.gz</span>) or a single <span class="mono">.jsonl</span> transcript from Claude Code, Codex, ChatGPT or pi.</p>
+      <label class="btn primary" style="display:inline-flex;align-items:center">Choose file<input type="file" id="file" accept=".gz,.tgz,.tar,.jsonl" hidden></label>
+    </div>
+    <p class="note">Nothing is written until you confirm. Existing sessions are never overwritten: identical ones are skipped, and a local copy is only replaced by a longer version of the same transcript.</p>
+    <div id="import-plan"></div>
+  </section>
+</main>
+
+<script>
+"use strict";
+const token = new URLSearchParams(location.search).get("token") || "";
+const $ = (s, el = document) => el.querySelector(s);
+const AGENTS = ["claude", "codex", "chatgpt", "pi"];
+const GLYPH = { user: "❯", assistant: "●", thinking: "∴", tool: "⚙", result: "↳", error: "✗", meta: "·" };
+const KIND_NAME = { user: "You", assistant: "Agent", thinking: "Thinking", tool: "Tools", result: "Output", error: "Errors", meta: "Meta" };
+
+function h(tag, attrs = {}, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid instanceof Node ? kid : String(kid));
+  return el;
+}
+const pad = (n) => String(n).padStart(2, "0");
+const day = (t) => { const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const clock = (t) => { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
+const stamp = (t) => t ? `${day(t)} ${clock(t).slice(0, 5)}` : "";
+const size = (b) => b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(0)} KB` : `${(b / 1048576).toFixed(1)} MB`;
+const project = (cwd) => !cwd ? "?" : cwd.split(/[\\/]/).filter(Boolean).pop() || cwd;
+const shortId = (id) => (/[0-9a-f]{8}/i.exec(id) || [id.slice(0, 8)])[0];
+const badge = (agent) => h("span", { class: `badge ${agent}` }, agent);
+
+let toastTimer;
+function toast(msg, err = false, ms = 3500) {
+  document.querySelectorAll(".toast").forEach((t) => t.remove());
+  const t = h("div", { class: "toast" + (err ? " err" : ""), role: "status" }, msg);
+  document.body.append(t);
+  clearTimeout(toastTimer);
+  if (ms) toastTimer = setTimeout(() => t.remove(), ms);
+  return t;
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { ...opts, headers: { "x-agtail-token": token, ...(opts.headers || {}) } });
+  if (!res.ok) {
+    let msg = res.statusText;
+    try { msg = (await res.json()).error || msg; } catch {}
+    throw new Error(msg);
+  }
+  return res;
+}
+
+/** Text with every regex match wrapped in <mark>. */
+function marked(text, re) {
+  if (!re) return document.createTextNode(text);
+  const frag = document.createDocumentFragment();
+  let last = 0;
+  re.lastIndex = 0;
+  for (let m; (m = re.exec(text)); ) {
+    if (!m[0].length) { re.lastIndex++; continue; }
+    frag.append(text.slice(last, m.index), h("mark", {}, m[0]));
+    last = m.index + m[0].length;
+  }
+  frag.append(text.slice(last));
+  return frag;
+}
+function queryRe(q, isRegex) {
+  if (!q) return null;
+  try { return new RegExp(isRegex ? q : q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"); } catch { return null; }
+}
+
+// ---------- tabs ----------
+function showTab(name) {
+  for (const b of document.querySelectorAll("nav.tabs button")) b.setAttribute("aria-selected", String(b.dataset.tab === name));
+  for (const s of document.querySelectorAll("main > section")) s.hidden = s.id !== `tab-${name}`;
+  if (name === "search") $("#q").focus();
+}
+document.querySelectorAll("nav.tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
+
+// ---------- sessions ----------
+let sessions = [];
+const selected = new Set();
+const state = { agents: new Set(), limit: 200 };
+
+async function loadSessions() {
+  $("#session-table").replaceChildren(h("div", { class: "empty" }, h("span", { class: "spinner" }), "Reading sessions…"));
+  try {
+    sessions = await (await api("/api/sessions")).json();
+  } catch (e) {
+    $("#session-table").replaceChildren(h("div", { class: "empty" }, e.message));
+    return;
+  }
+  const total = sessions.reduce((a, s) => a + s.size, 0);
+  $("#stats").textContent = `${sessions.length} sessions · ${size(total)}`;
+  const counts = Object.fromEntries(AGENTS.map((a) => [a, sessions.filter((s) => s.agent === a).length]));
+  $("#agent-chips").replaceChildren(...AGENTS.filter((a) => counts[a]).map((a) =>
+    h("button", { class: "chip", "aria-pressed": String(state.agents.has(a)), onclick: (ev) => {
+      state.agents.has(a) ? state.agents.delete(a) : state.agents.add(a);
+      ev.currentTarget.setAttribute("aria-pressed", String(state.agents.has(a)));
+      state.limit = 200; renderSessions();
+    } }, a, h("span", { class: "n" }, counts[a]))));
+  const sel = $("#search-agent");
+  sel.replaceChildren(h("option", { value: "" }, "All agents"), ...AGENTS.filter((a) => counts[a]).map((a) => h("option", { value: a }, a)));
+  renderSessions();
+}
+
+function visibleSessions() {
+  const f = $("#filter").value.trim().toLowerCase();
+  const days = Number($("#since").value);
+  const cutoff = days ? Date.now() - days * 864e5 : 0;
+  const subs = $("#subagents").checked;
+  return sessions.filter((s) =>
+    (!state.agents.size || state.agents.has(s.agent)) &&
+    (subs || !s.parent) &&
+    s.end >= cutoff &&
+    (!f || [s.cwd, s.title, s.first, s.id].some((x) => x && x.toLowerCase().includes(f))));
+}
+
+function renderSessions() {
+  const rows = visibleSessions();
+  const shown = rows.slice(0, state.limit);
+  $("#backup-shown").textContent = `Back up all shown (${rows.length})`;
+  $("#backup-shown").disabled = !rows.length;
+  updateSelected();
+  if (!rows.length) {
+    $("#session-table").replaceChildren(h("div", { class: "empty" }, sessions.length ? "No sessions match these filters." : "No sessions found."));
+    return;
+  }
+  const all = h("input", { type: "checkbox", "aria-label": "Select all shown", onclick: (ev) => {
+    for (const s of rows) ev.target.checked ? selected.add(s.key) : selected.delete(s.key);
+    renderSessions();
+  } });
+  all.checked = rows.every((s) => selected.has(s.key));
+  const table = h("table", { class: "list" },
+    h("thead", {}, h("tr", {},
+      h("th", {}, all), h("th", {}, "Last active"), h("th", {}, "Agent"), h("th", {}, "Project"),
+      h("th", {}, "Session"), h("th", { class: "num hide-sm" }, "Events"), h("th", { class: "num hide-sm" }, "Size"))),
+    h("tbody", {}, shown.map((s) => {
+      const box = h("input", { type: "checkbox", "aria-label": "Select session", onclick: (ev) => {
+        ev.stopPropagation();
+        ev.target.checked ? selected.add(s.key) : selected.delete(s.key);
+        updateSelected();
+      } });
+      box.checked = selected.has(s.key);
+      return h("tr", { onclick: () => openSession(s) },
+        h("td", {}, box),
+        h("td", { class: "when" }, stamp(s.end)),
+        h("td", {}, badge(s.agent)),
+        h("td", { class: "proj", title: s.cwd || "" }, project(s.cwd)),
+        h("td", { class: "what" },
+          h("div", {}, s.title || s.first || h("span", { style: "color:var(--muted)" }, "(no prompt)")),
+          h("div", { class: "sub mono" }, s.parent ? `subagent · ${s.id}` : s.id)),
+        h("td", { class: "num hide-sm" }, s.events.toLocaleString()),
+        h("td", { class: "num hide-sm" }, size(s.size)));
+    })));
+  const parts = [table];
+  if (rows.length > shown.length) parts.push(h("button", { class: "btn more", onclick: () => { state.limit += 500; renderSessions(); } }, `Show ${Math.min(500, rows.length - shown.length)} more of ${rows.length - shown.length}`));
+  $("#session-table").replaceChildren(...parts);
+}
+
+function updateSelected() {
+  const n = selected.size;
+  $("#backup-selected").disabled = !n;
+  $("#backup-selected").textContent = n ? `Back up selected (${n})` : "Back up selected";
+}
+$("#filter").addEventListener("input", () => { state.limit = 200; renderSessions(); });
+$("#since").addEventListener("change", () => { state.limit = 200; renderSessions(); });
+$("#subagents").addEventListener("change", renderSessions);
+$("#backup-selected").addEventListener("click", () => backup([...selected]));
+$("#backup-shown").addEventListener("click", () => {
+  const rows = visibleSessions();
+  backup(rows.length === sessions.length ? [] : rows.map((s) => s.key), rows.length);
+});
+
+async function backup(keys, count = keys.length) {
+  const t = toast(h("span", {}, h("span", { class: "spinner" }), `Backing up ${count} session${count === 1 ? "" : "s"}…`), false, 0);
+  try {
+    const res = await api(`/api/backup?keys=${encodeURIComponent(keys.join(","))}`);
+    const blob = await res.blob();
+    const name = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") || "")?.[1] || "agtail-backup.tar.gz";
+    const a = h("a", { href: URL.createObjectURL(blob), download: name });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    t.remove();
+    toast(`Saved ${name} (${size(blob.size)})`);
+  } catch (e) {
+    t.remove();
+    toast(`Backup failed: ${e.message}`, true);
+  }
+}
+
+// ---------- search ----------
+let lastQuery = { q: "", regex: false };
+$("#search-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const q = $("#q").value.trim();
+  if (!q) return;
+  const regex = $("#regex").checked;
+  lastQuery = { q, regex };
+  const params = new URLSearchParams({ q, regex: regex ? "1" : "0", kinds: $("#kind").value, agents: $("#search-agent").value });
+  $("#search-summary").replaceChildren(h("span", { class: "spinner" }), "Searching…");
+  $("#results").replaceChildren();
+  let data;
+  try {
+    data = await (await api(`/api/search?${params}`)).json();
+  } catch (e) {
+    $("#search-summary").textContent = e.message;
+    return;
+  }
+  const re = queryRe(q, regex);
+  $("#search-summary").textContent = data.total
+    ? `${data.total.toLocaleString()} match${data.total === 1 ? "" : "es"} in ${data.sessions} session${data.sessions === 1 ? "" : "s"} · ${data.took} ms` +
+      (data.results.length < data.sessions ? ` · showing the ${data.results.length} most recent` : "")
+    : `No matches · ${data.took} ms`;
+  $("#results").replaceChildren(...data.results.map((r) => {
+    const s = r.session;
+    return h("div", { class: "card hit", tabindex: "0", onclick: () => openSession(s, lastQuery),
+      onkeydown: (e) => { if (e.key === "Enter") openSession(s, lastQuery); } },
+      h("div", { class: "head" }, badge(s.agent),
+        h("span", { class: "t" }, `${project(s.cwd)} · ${s.title || s.first || shortId(s.id)}`),
+        h("span", { class: "meta" }, `${r.count} match${r.count === 1 ? "" : "es"} · ${stamp(r.matches.at(-1)?.t)} · `, h("span", { class: "mono" }, shortId(s.id)))),
+      r.matches.map((m) => h("div", { class: "line" },
+        h("span", { class: "when" }, `${day(m.t)} ${clock(m.t)}`),
+        h("span", { class: `k-${m.kind}`, title: m.kind }, GLYPH[m.kind] || "·"),
+        h("span", { class: "txt" }, m.label ? h("b", {}, m.label) : null, marked(m.snippet, re)))),
+      r.count > r.matches.length ? h("div", { class: "note", style: "margin:4px 0 0" }, `+ ${r.count - r.matches.length} earlier matches`) : null);
+  }));
+});
+
+// ---------- viewer ----------
+let viewer;
+async function openSession(s, query) {
+  closeViewer();
+  const hidden = new Set();
+  const find = h("input", { class: "field find", type: "search", placeholder: "Find in this session", value: query?.q || "" });
+  const findInfo = h("span", { class: "note", style: "margin:0" });
+  const events = h("div", { class: "events" }, h("div", { class: "empty" }, h("span", { class: "spinner" }), "Loading session…"));
+  const chips = h("div", { class: "chips" });
+  const drawer = h("div", { class: "drawer", role: "dialog", "aria-label": "Session" },
+    h("header", {},
+      h("div", { class: "row1" }, badge(s.agent), h("h2", {}, s.title || s.first || project(s.cwd)),
+        h("button", { class: "btn", onclick: () => backup([s.key], 1) }, "Back up"),
+        h("button", { class: "btn x", "aria-label": "Close", onclick: closeViewer }, "×")),
+      h("div", { class: "facts" },
+        h("span", { class: "mono" }, s.id),
+        h("span", {}, s.cwd || ""),
+        h("span", {}, `${stamp(s.start)} → ${stamp(s.end)}`),
+        h("span", {}, `${s.events.toLocaleString()} events · ${size(s.size)}`)),
+      h("div", { class: "row2" }, chips, find, findInfo,
+        h("button", { class: "btn", "aria-label": "Previous match", onclick: () => step(-1) }, "↑"),
+        h("button", { class: "btn", "aria-label": "Next match", onclick: () => step(1) }, "↓"))),
+    events);
+  const scrim = h("div", { class: "scrim", onclick: closeViewer });
+  document.body.append(scrim, drawer);
+  viewer = { drawer, scrim };
+
+  let data;
+  try {
+    data = await (await api(`/api/session?key=${encodeURIComponent(s.key)}`)).json();
+  } catch (e) {
+    events.replaceChildren(h("div", { class: "empty" }, e.message));
+    return;
+  }
+  if (viewer?.drawer !== drawer) return;
+  const kinds = [...new Set(data.events.map((e) => e.kind))];
+  chips.replaceChildren(...kinds.map((k) => h("button", { class: "chip", "aria-pressed": "true", onclick: (ev) => {
+    hidden.has(k) ? hidden.delete(k) : hidden.add(k);
+    ev.currentTarget.setAttribute("aria-pressed", String(!hidden.has(k)));
+    render();
+  } }, KIND_NAME[k] || k)));
+
+  let hits = [], cur = -1;
+  function render() {
+    const re = queryRe(find.value.trim(), query?.regex);
+    const nodes = [];
+    let lastDay = "";
+    hits = [];
+    for (const e of data.events) {
+      if (hidden.has(e.kind)) continue;
+      if (day(e.t) !== lastDay) { lastDay = day(e.t); nodes.push(h("div", { class: "day" }, lastDay)); }
+      const long = e.text.length > 1500 || e.text.split("\n").length > 14;
+      const pre = h("pre", {}, marked(e.text, re));
+      const row = h("div", { class: `ev k-${e.kind}${long ? " clamp" : ""}` },
+        h("span", { class: "when" }, clock(e.t)),
+        h("span", { class: `glyph k-${e.kind}`, title: e.kind }, GLYPH[e.kind] || "·"),
+        h("div", { class: "body" },
+          e.label ? h("span", { class: "label" }, e.label) : null,
+          pre,
+          long ? h("button", { class: "expand", onclick: (ev) => { row.classList.toggle("clamp"); ev.target.textContent = row.classList.contains("clamp") ? "Show all" : "Show less"; } }, "Show all") : null,
+          e.input ? h("details", {}, h("summary", {}, "Full input"), h("pre", {}, marked(e.input, re))) : null,
+          e.truncated ? h("div", { class: "trunc" }, "Truncated at 100,000 characters") : null));
+      if (re) { re.lastIndex = 0; if (re.test(e.text) || (e.input && (re.lastIndex = 0, re.test(e.input)))) hits.push(row); }
+      nodes.push(row);
+    }
+    events.replaceChildren(...(nodes.length ? nodes : [h("div", { class: "empty" }, "Nothing to show.")]));
+    cur = -1;
+    findInfo.textContent = find.value.trim() ? `${hits.length} match${hits.length === 1 ? "" : "es"}` : "";
+    if (hits.length) step(1);
+  }
+  function step(d) {
+    if (!hits.length) return;
+    hits[cur]?.classList.remove("current");
+    cur = (cur + d + hits.length) % hits.length;
+    const row = hits[cur];
+    row.classList.remove("clamp");
+    row.classList.add("current");
+    row.scrollIntoView({ block: "center" });
+    findInfo.textContent = `${cur + 1} / ${hits.length}`;
+  }
+  let t;
+  find.addEventListener("input", () => { clearTimeout(t); t = setTimeout(render, 200); });
+  find.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); step(ev.shiftKey ? -1 : 1); } });
+  render();
+}
+function closeViewer() {
+  viewer?.drawer.remove();
+  viewer?.scrim.remove();
+  viewer = undefined;
+}
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeViewer();
+  if (e.key === "/" && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName || "") && !viewer) {
+    e.preventDefault(); showTab("search");
+  }
+});
+
+// ---------- import ----------
+const LABEL = { new: "new", update: "longer version", same: "already here", older: "local is newer", conflict: "conflict", invalid: "can't import", imported: "imported", updated: "updated" };
+let pendingFile;
+async function planImport(file) {
+  pendingFile = file;
+  const plan = $("#import-plan");
+  plan.replaceChildren(h("div", { class: "empty" }, h("span", { class: "spinner" }), `Reading ${file.name}…`));
+  try {
+    const items = await (await api("/api/import/preview", { method: "POST", body: file, headers: { "x-filename": encodeURIComponent(file.name) } })).json();
+    renderPlan(items, false);
+  } catch (e) {
+    plan.replaceChildren(h("div", { class: "empty" }, `Couldn't read ${file.name}: ${e.message}`));
+  }
+}
+function renderPlan(items, done) {
+  const plan = $("#import-plan");
+  const count = (st) => items.filter((i) => st.includes(i.status)).length;
+  const writable = count(["new", "update"]);
+  const counts = h("div", { class: "counts" },
+    Object.entries(items.reduce((a, i) => ((a[i.status] = (a[i.status] || 0) + 1), a), {}))
+      .map(([st, n]) => h("span", {}, h("span", { class: `status s-${st}` }, LABEL[st] || st), ` ${n}`)));
+  const actions = h("div", { class: "toolbar" },
+    done
+      ? h("span", { class: "note", style: "margin:0" }, `Done: ${count(["imported"])} imported, ${count(["updated"])} updated. They now show up in Sessions and in the agents themselves.`)
+      : [h("button", { class: "btn primary", disabled: !writable, onclick: applyImport }, writable ? `Import ${writable} session file${writable === 1 ? "" : "s"}` : "Nothing new to import"),
+         h("button", { class: "btn", onclick: () => { pendingFile = undefined; plan.replaceChildren(); } }, "Cancel")]);
+  const table = h("div", { class: "card" }, h("table", { class: "list" },
+    h("thead", {}, h("tr", {}, h("th", {}, "Status"), h("th", {}, "Agent"), h("th", {}, "Session"), h("th", { class: "num hide-sm" }, "Events"))),
+    h("tbody", {}, items.map((i) => h("tr", { style: "cursor:default" },
+      h("td", {}, h("span", { class: `status s-${i.status}` }, LABEL[i.status] || i.status)),
+      h("td", {}, AGENTS.includes(i.agent) ? badge(i.agent) : i.agent),
+      h("td", { class: "what" },
+        h("div", {}, i.title || i.first || i.name),
+        h("div", { class: "sub mono", title: i.target || "" }, i.reason ? i.reason : i.target || i.name)),
+      h("td", { class: "num hide-sm" }, i.events != null ? i.events.toLocaleString() : ""))))));
+  plan.replaceChildren(counts, actions, table);
+}
+async function applyImport() {
+  if (!pendingFile) return;
+  const file = pendingFile;
+  const t = toast(h("span", {}, h("span", { class: "spinner" }), "Importing…"), false, 0);
+  try {
+    const items = await (await api("/api/import/apply", { method: "POST", body: file, headers: { "x-filename": encodeURIComponent(file.name) } })).json();
+    t.remove();
+    renderPlan(items, true);
+    pendingFile = undefined;
+    loadSessions();
+  } catch (e) {
+    t.remove();
+    toast(`Import failed: ${e.message}`, true);
+  }
+}
+const drop = $("#drop");
+$("#file").addEventListener("change", (e) => { const f = e.target.files[0]; if (f) planImport(f); e.target.value = ""; });
+drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); const f = e.dataTransfer.files[0]; if (f) planImport(f); });
+
+if (!token) {
+  $("main").replaceChildren(h("div", { class: "empty" }, "Open this page with the URL printed by ", h("code", {}, "agtail web"), " (it includes an access token)."));
+} else {
+  loadSessions();
+}
+</script>
+</body>
+</html>
