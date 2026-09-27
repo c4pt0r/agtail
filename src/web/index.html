@@ -114,11 +114,12 @@ mark { background: var(--mark); color: var(--mark-text); border-radius: 2px; pad
 .drawer .row1 h2 { font-size: 16px; margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drawer .facts { color: var(--muted); font-size: 12.5px; margin: 6px 0 10px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
 .drawer .facts .mono { font-size: 12px; }
+.drawer .facts span { overflow-wrap: anywhere; min-width: 0; }
 .drawer .row2 { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .drawer .row2 .find { flex: 1 1 200px; }
 .x { width: 34px; padding: 0; font-size: 18px; line-height: 1; }
 .events { overflow: auto; padding: 8px 18px 40px; flex: 1; }
-.ev { display: grid; grid-template-columns: 70px 18px 1fr; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border); content-visibility: auto; contain-intrinsic-size: auto 40px; }
+.ev { display: grid; grid-template-columns: 70px 18px 1fr; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border); }
 .ev .when { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; padding-top: 1px; }
 .ev .glyph { text-align: center; }
 .ev .body { min-width: 0; }
@@ -146,8 +147,7 @@ mark { background: var(--mark); color: var(--mark-text); border-radius: 2px; pad
   header.top { gap: 10px; padding: 0 16px; overflow-x: auto; }
   .brand span, .top .stats { display: none; }
   main { padding: 14px 16px 60px; }
-  .list .hide-sm { display: none; }
-  .list .proj { max-width: 90px; }
+  .list .hide-sm, .list .year { display: none; }
   .line { grid-template-columns: 18px 1fr; } .line .when { display: none; }
   .ev { grid-template-columns: 18px 1fr; } .ev .when { display: none; }
   .drawer header, .events { padding-left: 16px; padding-right: 16px; }
@@ -345,7 +345,7 @@ function renderSessions() {
   all.checked = rows.every((s) => selected.has(s.key));
   const table = h("table", { class: "list" },
     h("thead", {}, h("tr", {},
-      h("th", {}, all), h("th", {}, "Last active"), h("th", {}, "Agent"), h("th", {}, "Project"),
+      h("th", {}, all), h("th", {}, "Last active"), h("th", {}, "Agent"), h("th", { class: "hide-sm" }, "Project"),
       h("th", {}, "Session"), h("th", { class: "num hide-sm" }, "Events"), h("th", { class: "num hide-sm" }, "Size"))),
     h("tbody", {}, shown.map((s) => {
       const box = h("input", { type: "checkbox", "aria-label": "Select session", onclick: (ev) => {
@@ -356,9 +356,9 @@ function renderSessions() {
       box.checked = selected.has(s.key);
       return h("tr", { onclick: () => openSession(s) },
         h("td", {}, box),
-        h("td", { class: "when" }, stamp(s.end)),
+        h("td", { class: "when" }, h("span", { class: "year" }, stamp(s.end).slice(0, 5)), stamp(s.end).slice(5)),
         h("td", {}, badge(s.agent)),
-        h("td", { class: "proj", title: s.cwd || "" }, project(s.cwd)),
+        h("td", { class: "proj hide-sm", title: s.cwd || "" }, project(s.cwd)),
         h("td", { class: "what" },
           h("div", {}, s.title || s.first || h("span", { style: "color:var(--muted)" }, "(no prompt)")),
           h("div", { class: "sub mono" }, s.parent ? `subagent · ${s.id}` : s.id)),

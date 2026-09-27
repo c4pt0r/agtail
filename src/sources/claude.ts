@@ -25,7 +25,8 @@ export const claude: Source = {
 
   parse(r, info): AgentEvent[] {
     if (!r || typeof r !== "object") return [];
-    if (typeof r.cwd === "string") info.cwd = r.cwd;
+    // keep the directory the session started in; later records follow `cd`
+    if (typeof r.cwd === "string" && !info.cwd) info.cwd = r.cwd;
     if (r.type === "ai-title" && typeof r.aiTitle === "string") info.title = r.aiTitle;
     if (r.type === "summary" && typeof r.summary === "string") info.title = r.summary;
 
