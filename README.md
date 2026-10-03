@@ -95,31 +95,6 @@ cut down to the text around the match, with the match highlighted. Every line ca
 narrow both commands, and `-o jsonl` / `-o raw` work with them too. Codex sessions that were
 resumed into several files are merged back into one.
 
-### Web UI
-
-```sh
-agtail web                  # opens http://127.0.0.1:7717/?token=… in your browser
-agtail web --port 8080 --no-open
-```
-
-A local page with three tabs:
-
-- **Sessions**: every session from every agent, filterable by agent, time and text. Click one to
-  read it in full (filter by event type, find within the session). Select sessions and
-  **back them up** to a `.tar.gz`.
-- **Search**: the same search as `agtail grep`, grouped by session with matches highlighted;
-  click a result to open the session at the match.
-- **Import**: drop in an agtail backup or a single `.jsonl` transcript, preview, then restore.
-  Sessions go back into each agent's own folder, so they show up in the agent again.
-
-Backups are plain tar archives: a `manifest.json` plus the untouched transcript files
-(`claude/…`, `codex/…`, `pi/…`), so `tar xzf` works too. Import never overwrites: identical files
-are skipped, a local copy is only replaced by a longer version of the same transcript, and
-anything else is reported as a conflict and left alone.
-
-The server listens on 127.0.0.1 only, and every API call needs the random token in the URL it
-prints, so other websites and users can't read your sessions through it.
-
 ### Filtering
 
 ```sh

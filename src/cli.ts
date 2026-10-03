@@ -16,8 +16,6 @@ Usage:
   agtail grep <keyword>     find sessions containing <keyword> (all history),
                             then keep printing new matches live
   agtail show <session-id>  print a whole session from the start
-  agtail web                open a local web UI: browse, search, back up
-                            and import sessions
 
 Agents: claude (Claude Code), codex (Codex CLI), chatgpt (ChatGPT/Codex
 desktop app & Chrome side panel), pi (pi coding agent)
@@ -54,11 +52,6 @@ grep / show:
       --max <n>          grep: matching lines shown per session (default 5)
       --show             grep: print every matching session in full
   -a/-p/-k/--since also narrow grep and show; -f/-F/-t/-o shape the output.
-
-web:
-      --port <n>         port (default 7717; 0 picks a free one)
-      --host <addr>      address to bind (default 127.0.0.1)
-      --no-open          don't open the browser
   <session-id> can be any unique prefix, e.g. the 8 chars after "#".
 
 Env: CLAUDE_CONFIG_DIR, CODEX_HOME, PI_CODING_AGENT_DIR override locations.
@@ -109,9 +102,6 @@ async function main() {
       list: { type: "boolean", short: "l" },
       max: { type: "string", default: "5" },
       show: { type: "boolean" },
-      port: { type: "string", default: "7717" },
-      host: { type: "string", default: "127.0.0.1" },
-      "no-open": { type: "boolean" },
     },
   });
   if (values.help) {
@@ -398,11 +388,6 @@ async function main() {
   }
   if (isHistory) {
     await history();
-    return;
-  }
-  if (cmd === "web") {
-    const { serve } = await import("./web/server.ts");
-    await serve({ sources, host: values.host!, port: Number(values.port), open: !values["no-open"] });
     return;
   }
   if (positionals.length) {
